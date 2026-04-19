@@ -1,0 +1,1 @@
+# Scaffold — Agent Harness Core

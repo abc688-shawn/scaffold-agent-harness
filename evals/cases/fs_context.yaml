@@ -1,0 +1,76 @@
+# Context management and reasoning eval cases
+cases:
+  # --- Context-heavy scenarios ---
+  - id: ctx_multi_file_summary
+    description: "Read and compare multiple files"
+    user_input: "Compare the architecture described in docs/architecture.md with the actual module structure in scaffold/"
+    expected_tools: ["read_file", "list_files"]
+    expected_contains: []
+    category: context
+    tags: [read, list, context, reasoning]
+
+  - id: ctx_codebase_overview
+    description: "Provide project overview from multiple sources"
+    user_input: "Give me a quick overview of this project - what does it do and how is it structured?"
+    expected_tools: ["read_file", "list_files"]
+    expected_contains: ["scaffold", "agent"]
+    category: context
+    tags: [overview, context]
+
+  - id: ctx_deep_code_analysis
+    description: "Analyze code flow across files"
+    user_input: "Trace the flow of a tool call from the ReAct loop through tool execution. What happens at each step?"
+    expected_tools: ["read_file"]
+    expected_contains: ["tool"]
+    category: context
+    tags: [code, analysis, context]
+
+  - id: ctx_dependency_analysis
+    description: "Understand module dependencies"
+    user_input: "What does scaffold/loop/react.py import and depend on?"
+    expected_tools: ["read_file"]
+    expected_contains: ["import"]
+    category: context
+    tags: [import, dependency, context]
+
+  # --- Reasoning quality ---
+  - id: reason_error_diagnosis
+    description: "Diagnose a hypothetical error"
+    user_input: "If a tool returned 'Path outside sandbox', what could have caused it and how would you fix it?"
+    expected_tools: []
+    expected_contains: ["sandbox"]
+    category: reasoning
+    tags: [error, diagnosis, reasoning]
+
+  - id: reason_design_question
+    description: "Answer a design question"
+    user_input: "Why does the project separate scaffold/ from fs_agent/? What's the benefit?"
+    expected_tools: []
+    expected_contains: []
+    category: reasoning
+    tags: [design, architecture, reasoning]
+
+  - id: reason_optimization
+    description: "Suggest optimization"
+    user_input: "Looking at the context compression code, what improvements would you suggest?"
+    expected_tools: ["read_file", "search_files"]
+    expected_contains: []
+    category: reasoning
+    tags: [optimization, reasoning]
+
+  # --- Writing assistance ---
+  - id: write_summary_doc
+    description: "Generate documentation from code"
+    user_input: "Write a brief API reference for the tool registry (scaffold/tools/registry.py)"
+    expected_tools: ["read_file"]
+    expected_contains: ["register", "tool"]
+    category: writing
+    tags: [write, docs, writing]
+
+  - id: write_test_suggestion
+    description: "Suggest test cases for a module"
+    user_input: "What test cases should I write for scaffold/safety/sandbox.py?"
+    expected_tools: ["read_file"]
+    expected_contains: ["test"]
+    category: writing
+    tags: [test, suggestion, writing]

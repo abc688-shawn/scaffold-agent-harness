@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scaffold"
+version = "0.1.0"
+description = "A general-purpose Agent Harness framework"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=1.0",
+    "httpx>=0.25",
+    "tenacity>=8.2",
+    "pydantic>=2.0",
+    "tiktoken>=0.5",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+fs = [
+    "pymupdf>=1.23",
+    "python-docx>=1.0",
+    "chardet>=5.0",
+]
+eval = [
+    "tabulate>=0.9",
+]
+ui = [
+    "streamlit>=1.30",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "ruff>=0.1",
+]
+
+[project.scripts]
+fs-agent = "fs_agent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["scaffold*", "fs_agent*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

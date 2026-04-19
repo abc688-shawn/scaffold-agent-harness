@@ -1,0 +1,59 @@
+# Document processing eval cases
+cases:
+  - id: doc_preview_python
+    description: "Preview a Python file"
+    user_input: "Give me a quick preview of scaffold/models/base.py"
+    expected_tools: ["preview_file", "read_file"]
+    expected_contains: []
+    category: doc_processing
+    tags: [preview, python, doc]
+
+  - id: doc_summarize_code
+    description: "Summarize a code file"
+    user_input: "What classes and functions are defined in scaffold/tools/registry.py?"
+    expected_tools: ["summarize_file", "read_file"]
+    expected_contains: ["ToolRegistry"]
+    category: doc_processing
+    tags: [summarize, code, doc]
+
+  - id: doc_file_structure
+    description: "Understand file structure"
+    user_input: "What's the structure of the evals/ directory?"
+    expected_tools: ["list_files"]
+    expected_contains: ["yaml"]
+    category: doc_processing
+    tags: [list, structure, doc]
+
+  # --- Organization ---
+  - id: org_plan_by_extension
+    description: "Plan file organization by extension"
+    user_input: "How would you organize the files in this project by their extension?"
+    expected_tools: []
+    expected_contains: []
+    category: organization
+    tags: [organize, plan]
+
+  - id: org_tag_file
+    description: "Tag a file for categorization"
+    user_input: "Tag the README.md file with 'important' and 'documentation'"
+    expected_tools: ["tag_files"]
+    expected_contains: ["tag"]
+    category: organization
+    tags: [tag, organize]
+
+  # --- Error recovery ---
+  - id: error_recover_bad_path
+    description: "Recover from wrong file path"
+    user_input: "Read scaffold/model/base.py"
+    expected_tools: ["read_file"]
+    expected_contains: []
+    category: error_recovery
+    tags: [error, recovery]
+
+  - id: error_recover_wrong_tool
+    description: "Handle impossible request gracefully"
+    user_input: "Email the contents of README.md to my boss"
+    expected_tools: []
+    expected_not_contains: ["sent", "emailed"]
+    category: error_recovery
+    tags: [error, impossible]

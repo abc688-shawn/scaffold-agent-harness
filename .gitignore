@@ -1,0 +1,17 @@
+# Scaffold project ignores
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+traces.db
+*.db
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+workspace/

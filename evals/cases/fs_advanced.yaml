@@ -1,0 +1,67 @@
+# Advanced file operation eval cases
+cases:
+  # --- Multi-step workflows ---
+  - id: multi_list_and_summarize
+    description: "List files then summarize specific one"
+    user_input: "List all markdown files in this project and tell me what the README is about"
+    expected_tools: ["list_files", "read_file"]
+    expected_contains: []
+    category: multi_step
+    tags: [list, read, multi_step]
+
+  - id: multi_search_and_read
+    description: "Search for keyword then read matching file"
+    user_input: "Find files that mention 'token budget' and show me the relevant code"
+    expected_tools: ["search_files", "read_file"]
+    expected_contains: ["token"]
+    category: multi_step
+    tags: [search, read, multi_step]
+
+  - id: multi_compare_workflow
+    description: "Compare two files"
+    user_input: "What are the differences between scaffold/models/base.py and scaffold/models/mock.py?"
+    expected_tools: ["read_file"]
+    expected_contains: []
+    category: multi_step
+    tags: [read, compare, multi_step]
+
+  - id: multi_explore_directory
+    description: "Explore directory structure then drill down"
+    user_input: "What's the structure of the scaffold/ directory? Show me the most complex module."
+    expected_tools: ["list_files"]
+    expected_contains: []
+    category: multi_step
+    tags: [list, explore, multi_step]
+
+  - id: multi_find_and_explain
+    description: "Find a function and explain it"
+    user_input: "Find where compress_messages is defined and explain how the compression strategies work"
+    expected_tools: ["search_files", "read_file"]
+    expected_contains: ["compress"]
+    category: multi_step
+    tags: [search, read, explain, multi_step]
+
+  # --- File metadata ---
+  - id: metadata_multiple_files
+    description: "Get info about multiple files"
+    user_input: "How large are the three biggest Python files in this project?"
+    expected_tools: ["list_files"]
+    expected_contains: []
+    category: metadata
+    tags: [info, size, metadata]
+
+  - id: metadata_file_count
+    description: "Count files by type"
+    user_input: "How many Python files are in this project?"
+    expected_tools: ["list_files"]
+    expected_contains: [".py"]
+    category: metadata
+    tags: [list, count, metadata]
+
+  - id: metadata_recent_files
+    description: "Find recently modified files"
+    user_input: "What files were modified most recently?"
+    expected_tools: ["list_files"]
+    expected_contains: []
+    category: metadata
+    tags: [list, time, metadata]

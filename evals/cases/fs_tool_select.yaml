@@ -1,0 +1,83 @@
+# Tool selection and description quality eval cases
+cases:
+  # --- Tool selection accuracy ---
+  - id: tool_select_list_vs_search
+    description: "Should use list_files, not search"
+    user_input: "What files are in the docs/ folder?"
+    expected_tools: ["list_files"]
+    expected_contains: []
+    category: tool_selection
+    tags: [list, tool_select]
+
+  - id: tool_select_search_vs_list
+    description: "Should use search_files for content query"
+    user_input: "Which files contain the word 'injection'?"
+    expected_tools: ["search_files"]
+    expected_contains: []
+    category: tool_selection
+    tags: [search, tool_select]
+
+  - id: tool_select_info_vs_read
+    description: "Should use file_info for metadata, not read_file"
+    user_input: "When was pyproject.toml last modified?"
+    expected_tools: ["file_info"]
+    expected_contains: []
+    category: tool_selection
+    tags: [info, tool_select]
+
+  - id: tool_select_read_for_content
+    description: "Should use read_file for actual content"
+    user_input: "Show me the first 20 lines of scaffold/loop/react.py"
+    expected_tools: ["read_file"]
+    expected_contains: ["ReAct"]
+    category: tool_selection
+    tags: [read, tool_select]
+
+  - id: tool_select_search_keyword
+    description: "Should search for a keyword across codebase"
+    user_input: "Find all TODO comments in the codebase"
+    expected_tools: ["search_files"]
+    expected_contains: []
+    category: tool_selection
+    tags: [search, keyword, tool_select]
+
+  # --- Edge cases ---
+  - id: edge_empty_dir
+    description: "List empty directory gracefully"
+    user_input: "What files are in the tests/__pycache__/ directory?"
+    expected_tools: ["list_files"]
+    expected_contains: []
+    category: edge_case
+    tags: [list, empty, edge]
+
+  - id: edge_binary_file
+    description: "Handle binary file gracefully"
+    user_input: "Read the file .git/HEAD"
+    expected_tools: ["read_file"]
+    expected_contains: []
+    category: edge_case
+    tags: [read, binary, edge]
+
+  - id: edge_large_output
+    description: "Handle large directory listing"
+    user_input: "List ALL files recursively in the entire project"
+    expected_tools: ["list_files"]
+    expected_contains: []
+    category: edge_case
+    tags: [list, large, edge]
+
+  - id: edge_nonexistent_file
+    description: "Handle missing file gracefully"
+    user_input: "Read the file this_does_not_exist.txt"
+    expected_tools: ["read_file"]
+    expected_contains: ["not"]
+    category: edge_case
+    tags: [read, error, edge]
+
+  - id: edge_ambiguous_query
+    description: "Handle ambiguous user request"
+    user_input: "Show me the thing about models"
+    expected_tools: []
+    expected_contains: []
+    category: edge_case
+    tags: [ambiguous, edge]
