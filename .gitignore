@@ -15,3 +15,4 @@ traces.db
 .pytest_cache/
 .mypy_cache/
 workspace/
+# uv.lock 应提交到 git，此处不忽略
