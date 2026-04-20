@@ -10,6 +10,13 @@ import argparse
 import asyncio
 import os
 import sys
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / ".env", override=False)
+except ImportError:
+    pass
 
 from scaffold.models.openai_compat import OpenAICompatModel
 from scaffold.context.window import ContextWindow
@@ -32,17 +39,22 @@ except ImportError:
     pass
 
 
-SYSTEM_PROMPT = """You are a helpful file system assistant. You can browse, read, search, and manage files in the user's workspace.
+def _build_system_prompt(workspace: str) -> str:
+    return f"""你是一个专业的文件系统助手，能够浏览、阅读、搜索和管理用户工作区中的文件。
 
-When the user asks a question:
-1. First understand what they need
-2. Use the available tools to find information
-3. Provide a clear, concise answer based on what you found
+用户的工作区根目录是：{workspace}
+调用任何工具时，必须使用完整绝对路径，例如：
+- 列出文件：list_files(path="{workspace}")
+- 读取文件：read_file(path="{workspace}/文件名.pdf")
+- 禁止使用相对路径（如 "."、"文件名.pdf"），必须包含完整路径前缀。
 
-Always tell the user what you found and cite specific files when relevant.
+当用户提问时：
+1. 先理解用户需要什么
+2. 使用可用工具查找信息，路径始终使用绝对路径
+3. 给出清晰、简洁的回答，并在相关时引用具体文件名
 
-{injection_defense}
-""".format(injection_defense=INJECTION_DEFENSE_PROMPT)
+{INJECTION_DEFENSE_PROMPT}
+"""
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -94,7 +106,7 @@ async def run_interactive(args: argparse.Namespace) -> None:
         pass
 
     budget = TokenBudget(max_context_tokens=128_000)
-    context = ContextWindow(system_prompt=SYSTEM_PROMPT, budget=budget)
+    context = ContextWindow(system_prompt=_build_system_prompt(str(sandbox.roots[0])), budget=budget)
     trace_storage = TraceStorage(args.trace_db)
 
     config = LoopConfig(max_steps=args.max_steps)
