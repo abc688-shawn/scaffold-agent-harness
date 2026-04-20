@@ -1,7 +1,7 @@
 """Scaffold fs-agent — interactive web chat UI.
 
 Launch:
-    streamlit run app.py
+    streamlit run fs_agent/app.py
 
 Features:
 - Upload documents (PDF, DOCX, TXT, CSV, etc.) to a persistent local library
@@ -18,7 +18,7 @@ from pathlib import Path
 # Load .env so API credentials don't need to be set manually each time
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).parent / ".env", override=False)
+    load_dotenv(Path(__file__).parent.parent / ".env", override=False)
 except ImportError:
     pass
 
@@ -38,8 +38,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Default persistent document library — lives inside the project directory
-_DEFAULT_WORKSPACE = Path(__file__).parent / "workspace"
+# Default persistent document library — lives at project root
+_DEFAULT_WORKSPACE = Path(__file__).parent.parent / "workspace"
 
 # ---------------------------------------------------------------------------
 # Session state helpers
@@ -83,9 +83,9 @@ with st.sidebar:
     )
     permission = st.selectbox(
         "权限级别",
-        ["confirm_write", "read_only", "autonomous"],
+        ["autonomous", "read_only"],
         index=0,
-        help="read_only: 只读 | confirm_write: 写操作需确认 | autonomous: 完全自主",
+        help="autonomous: Web UI 中推荐，所有操作直接执行 | read_only: 只允许读取，禁止任何写操作（confirm_write 需要终端交互，不适用于 Web UI）",
     )
     max_steps = st.slider("最大步数", min_value=5, max_value=30, value=15)
 
@@ -186,9 +186,15 @@ def _build_agent_components(api_key: str, api_base: str, model: str,
 
     system_prompt = f"""你是一个专业的文件助手，能够浏览、阅读、搜索和分析用户工作区中的文件。
 
+用户的工作区根目录是：{workspace}
+调用任何工具时，必须使用完整绝对路径，例如：
+- 列出文件：list_files(path="{workspace}")
+- 读取文件：read_file(path="{workspace}/文件名.pdf")
+- 禁止使用相对路径（如 "."、"文件名.pdf"），必须包含完整路径前缀。
+
 当用户提问时：
 1. 先理解用户需要什么
-2. 使用可用工具查找信息
+2. 使用可用工具查找信息，路径始终使用绝对路径
 3. 给出清晰、简洁的回答，并在相关时引用具体文件名
 
 {INJECTION_DEFENSE_PROMPT}
