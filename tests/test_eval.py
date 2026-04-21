@@ -1,4 +1,4 @@
-"""Tests for eval runner — case loading, rule evaluation, judge integration."""
+"""评测运行器测试 —— case 加载、规则评估与裁判集成。"""
 from __future__ import annotations
 
 import pytest
@@ -116,8 +116,8 @@ class TestEvaluateResult:
                         expected_not_contains=["no"])
         result = self._make_result("yes, indeed, no problem")
         er = evaluate_result(case, result)
-        # "yes" found → pass, "no" found → fail
-        # score = 1/2 = 0.5 → not passed (threshold 0.8)
+        # "yes" 找到则通过，"no" 找到则失败
+        # score = 1/2 = 0.5，因此不会通过（阈值为 0.8）
         assert not er.passed
 
 

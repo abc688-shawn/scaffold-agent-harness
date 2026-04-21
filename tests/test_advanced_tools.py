@@ -1,4 +1,4 @@
-"""Tests for advanced tools — organize, tag, compare."""
+"""高级工具测试 —— 整理、打标签与比较。"""
 from __future__ import annotations
 
 import json

@@ -1,9 +1,8 @@
-"""Base abstractions for LLM adapters.
+"""LLM 适配器的基础抽象。
 
-Design decision: we define our own Message / ToolCall dataclasses so the rest of
-Scaffold never touches provider-specific formats.  Each concrete adapter is
-responsible for converting *to* the provider wire format and *from* it back into
-these neutral types.
+设计决策：我们定义了自己的 Message / ToolCall 数据类，这样 Scaffold
+其余部分就不需要接触特定于提供商的格式。每个具体适配器都负责在提供商的
+线协议格式与这些中立类型之间进行双向转换。
 """
 from __future__ import annotations
 
@@ -15,7 +14,7 @@ from typing import Any, AsyncIterator, Sequence
 
 
 # ---------------------------------------------------------------------------
-# Neutral message types
+# 中立消息类型
 # ---------------------------------------------------------------------------
 
 class Role(str, Enum):
@@ -27,7 +26,7 @@ class Role(str, Enum):
 
 @dataclass
 class ToolCall:
-    """A single tool invocation requested by the model."""
+    """模型请求的一次工具调用。"""
     id: str
     name: str
     arguments: dict[str, Any]
@@ -38,7 +37,7 @@ class ToolCall:
 
 @dataclass
 class ToolResult:
-    """The result we send back after executing a tool."""
+    """工具执行后回传给模型的结果。"""
     tool_call_id: str
     name: str
     content: str
@@ -53,7 +52,7 @@ class Message:
     tool_call_id: str | None = None
     name: str | None = None
 
-    # ---- convenience constructors ----
+    # ---- 便捷构造方法 ----
     @classmethod
     def system(cls, content: str) -> "Message":
         return cls(role=Role.SYSTEM, content=content)
@@ -89,19 +88,19 @@ class Usage:
 
 @dataclass
 class ModelResponse:
-    """Normalized response from any LLM provider."""
+    """来自任意 LLM 提供商的标准化响应。"""
     message: Message
     usage: Usage = field(default_factory=Usage)
     finish_reason: str | None = None
-    raw: Any = None  # original provider response, for debugging
+    raw: Any = None  # 提供商返回的原始响应，便于调试
 
 
 # ---------------------------------------------------------------------------
-# Abstract base
+# 抽象基类
 # ---------------------------------------------------------------------------
 
 class ChatModel(abc.ABC):
-    """Unified interface every LLM adapter must implement."""
+    """每个 LLM 适配器都必须实现的统一接口。"""
 
     @abc.abstractmethod
     async def chat(
@@ -112,7 +111,7 @@ class ChatModel(abc.ABC):
         max_tokens: int | None = None,
         **kwargs: Any,
     ) -> ModelResponse:
-        """Single-turn (non-streaming) chat completion."""
+        """单轮对话的非流式补全。"""
 
     async def chat_stream(
         self,
@@ -122,9 +121,9 @@ class ChatModel(abc.ABC):
         max_tokens: int | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ModelResponse]:
-        """Streaming variant — yields partial deltas.
+        """流式变体，会逐步产出增量结果。
 
-        Default implementation falls back to non-streaming.
+        默认实现会回退到非流式调用。
         """
         resp = await self.chat(messages, tools, temperature, max_tokens, **kwargs)
         yield resp

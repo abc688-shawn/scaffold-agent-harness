@@ -1,4 +1,4 @@
-"""Tests for Context Manager: budget, compression, window."""
+"""上下文管理器测试：预算、压缩与窗口。"""
 import pytest
 
 from scaffold.models.base import Message, ToolCall, ToolResult, Role
@@ -25,7 +25,7 @@ class TestTokenBudget:
     def test_needs_compression(self):
         b = TokenBudget(max_context_tokens=1000, response_reserve=100,
                         system_reserve=100, tool_schema_reserve=100)
-        # Available = 700
+        # 可用 token 为 700
         assert not b.needs_compression(500)
         assert b.needs_compression(800)
 
@@ -49,19 +49,19 @@ class TestCompression:
         return msgs
 
     def test_sliding_window(self):
-        msgs = self._make_messages(10)  # 20 messages
+        msgs = self._make_messages(10)  # 共 20 条消息
         compressed = compress_messages(
             msgs, strategy=CompressionStrategy.SLIDING_WINDOW, keep_last_n=6
         )
-        # Should have 1 summary + 6 recent
+        # 应该包含 1 条摘要 + 6 条最近消息
         assert len(compressed) == 7
         assert compressed[0].role == Role.SYSTEM
         assert "truncated" in compressed[0].content.lower()
 
     def test_no_compression_needed(self):
-        msgs = self._make_messages(2)  # 4 messages
+        msgs = self._make_messages(2)  # 共 4 条消息
         compressed = compress_messages(msgs, keep_last_n=6)
-        assert len(compressed) == 4  # unchanged
+        assert len(compressed) == 4  # 保持不变
 
     def test_summary_with_refs(self):
         store = ReferenceStore()
@@ -77,8 +77,8 @@ class TestCompression:
             msgs, strategy=CompressionStrategy.SUMMARY_WITH_REFS,
             keep_last_n=2, ref_store=store,
         )
-        assert len(store) >= 1  # tool result stored
-        assert len(compressed) == 3  # 1 summary + 2 recent
+        assert len(store) >= 1  # 工具结果已被存储
+        assert len(compressed) == 3  # 1 条摘要 + 2 条最近消息
 
 
 class TestContextWindow:

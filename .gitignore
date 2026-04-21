@@ -17,4 +17,3 @@ traces.db
 workspace/
 docs/
 .DS_Store
-# uv.lock 应提交到 git，此处不忽略

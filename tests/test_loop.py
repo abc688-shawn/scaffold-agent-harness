@@ -1,4 +1,4 @@
-"""Tests for the ReAct agent loop using MockModel."""
+"""使用 MockModel 的 ReAct agent 循环测试。"""
 from __future__ import annotations
 
 import asyncio
@@ -33,7 +33,7 @@ class TestReActLoop:
 
         @reg.tool
         def greet(name: str) -> str:
-            """Greet someone."""
+            """向某人问好。"""
             return f"Hi, {name}!"
 
         script = [
@@ -54,12 +54,12 @@ class TestReActLoop:
         assert result.steps == 2
 
     def test_max_steps_limit(self):
-        # Model always returns tool calls → should hit max steps
+        # 模型始终返回工具调用，因此应触发最大步数限制
         reg = ToolRegistry()
 
         @reg.tool
         def noop() -> str:
-            """Do nothing."""
+            """什么也不做。"""
             return "ok"
 
         infinite_calls = [
@@ -81,10 +81,10 @@ class TestReActLoop:
 
         @reg.tool
         def repeat() -> str:
-            """Repeat."""
+            """重复返回相同结果。"""
             return "same"
 
-        # Same tool call 3+ times should trigger reflection
+        # 同一工具调用出现 3 次以上时应触发反思
         same_call = ModelResponse(
             message=Message.assistant(
                 tool_calls=[ToolCall(id="1", name="repeat", arguments={})]
@@ -97,5 +97,5 @@ class TestReActLoop:
         loop = self._setup(script, tools=reg)
         loop._config.loop_detect_window = 3
         result = asyncio.get_event_loop().run_until_complete(loop.run("test"))
-        # Should have injected a reflection message at some point
+        # 在某个时刻应该注入了一条反思消息
         assert result.steps > 3

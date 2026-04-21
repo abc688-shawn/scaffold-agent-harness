@@ -1,4 +1,4 @@
-"""Tests for document processing tools — preview, summarize (PDF/DOCX mocked)."""
+"""文档处理工具测试 —— 预览与摘要（PDF/DOCX 使用 mock）。"""
 from __future__ import annotations
 
 import pytest
@@ -12,7 +12,7 @@ import fs_agent.tools.file_tools as ft_module
 
 @pytest.fixture(autouse=True)
 def _set_sandbox(tmp_path):
-    """Set up sandbox pointing to tmp_path for all tests."""
+    """为所有测试设置指向 tmp_path 的沙箱。"""
     old = ft_module._sandbox
     ft_module._sandbox = PathSandbox([str(tmp_path)])
     yield

@@ -1,14 +1,14 @@
-"""Eval runner — load cases, run agent, evaluate results.
+"""评测运行器 —— 加载 case、运行 agent、评估结果。
 
-Supports two evaluation modes:
-  1. Rule-based: substring checks, tool usage checks (fast, free)
-  2. LLM-as-judge: DeepSeek/other LLM scores on 4 dimensions (richer signal)
+支持两种评测模式：
+  1. 基于规则：子串检查、工具使用检查（快、免费）
+  2. LLM-as-judge：由 DeepSeek / 其他 LLM 从 4 个维度打分（信号更丰富）
 
-Usage:
-    # Rule-based only
+用法：
+    # 仅使用规则评测
     python -m evals.runner --cases evals/cases/ --output results.json
 
-    # With LLM judge
+    # 结合 LLM 裁判
     python -m evals.runner --cases evals/cases/ --judge --output results.json
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class EvalCase:
-    """A single benchmark case."""
+    """单个基准测试 case。"""
     id: str
     description: str
     user_input: str
@@ -62,7 +62,7 @@ class EvalResult:
 
 
 def load_cases(path: str | Path) -> list[EvalCase]:
-    """Load eval cases from a YAML file or directory of YAML files."""
+    """从 YAML 文件或 YAML 目录中加载评测 case。"""
     p = Path(path)
     files = list(p.glob("*.yaml")) + list(p.glob("*.yml")) if p.is_dir() else [p]
     cases = []
@@ -79,7 +79,7 @@ def load_cases(path: str | Path) -> list[EvalCase]:
 
 
 def _extract_tool_history(history: list[Message]) -> list[dict[str, Any]]:
-    """Extract tool call records from conversation history."""
+    """从对话历史中提取工具调用记录。"""
     calls: list[dict[str, Any]] = []
     for msg in history:
         if msg.tool_calls:
@@ -89,19 +89,19 @@ def _extract_tool_history(history: list[Message]) -> list[dict[str, Any]]:
 
 
 def evaluate_result(case: EvalCase, result: Any) -> EvalResult:
-    """Rule-based evaluation of a single case."""
+    """对单个 case 进行基于规则的评估。"""
     checks: dict[str, bool] = {}
     final = result.final_message or ""
 
-    # Check expected substrings
+    # 检查预期应包含的子串
     for s in case.expected_contains:
         checks[f"contains:{s}"] = s.lower() in final.lower()
 
-    # Check forbidden substrings
+    # 检查预期不应包含的子串
     for s in case.expected_not_contains:
         checks[f"not_contains:{s}"] = s.lower() not in final.lower()
 
-    # Check tool usage from history
+    # 检查历史中的工具使用情况
     called_tools = {
         tc.name
         for msg in result.history
@@ -137,18 +137,18 @@ async def run_eval(
     categories: list[str] | None = None,
     tags: list[str] | None = None,
 ) -> list[EvalResult]:
-    """Run eval cases and return results.
+    """运行评测 case 并返回结果。
 
-    Args:
-        cases: Eval cases to run.
-        model: The agent LLM.
-        tools: Tool registry for the agent.
-        system_prompt: System prompt for the agent.
-        judge_model: If provided, also run LLM-as-judge scoring.
-        categories: If provided, only run cases in these categories.
-        tags: If provided, only run cases that have at least one matching tag.
+    参数：
+        cases: 要运行的评测 case。
+        model: agent 使用的 LLM。
+        tools: agent 使用的工具注册表。
+        system_prompt: agent 的 system prompt。
+        judge_model: 如果提供，则额外执行 LLM-as-judge 打分。
+        categories: 如果提供，则只运行这些分类下的 case。
+        tags: 如果提供，则只运行至少命中一个标签的 case。
     """
-    # Filter cases
+    # 过滤 case
     filtered = cases
     if categories:
         cat_set = set(categories)
@@ -157,7 +157,7 @@ async def run_eval(
         tag_set = set(tags)
         filtered = [c for c in filtered if tag_set & set(c.tags)]
 
-    # Optionally build judge
+    # 按需构建裁判对象
     judge = None
     if judge_model is not None:
         from evals.judges.llm_judge import LLMJudge
@@ -179,7 +179,7 @@ async def run_eval(
             er = evaluate_result(case, result)
             er.latency_ms = elapsed
 
-            # LLM-as-judge scoring
+            # LLM-as-judge 打分
             if judge is not None:
                 tool_history = _extract_tool_history(result.history)
                 if case.category == "security":
@@ -191,7 +191,7 @@ async def run_eval(
                     )
                     er.judge_scores = {"security": sec_score.security_score}
                     er.judge_rationale = sec_score.rationale
-                    # Override pass if security was compromised
+                    # 若安全被攻破，则强制判定失败
                     if sec_score.compromised:
                         er.passed = False
                         er.score = min(er.score, sec_score.normalized)
@@ -209,7 +209,7 @@ async def run_eval(
                         "efficiency": judge_score.efficiency,
                     }
                     er.judge_rationale = judge_score.rationale
-                    # Combine rule score and judge score
+                    # 合并规则分与裁判分
                     combined = (er.score + judge_score.normalized) / 2
                     er.score = combined
                     er.passed = combined >= 0.7
@@ -226,7 +226,7 @@ async def run_eval(
 
 
 def print_summary(results: list[EvalResult]) -> None:
-    """Print overall + per-category summary to stdout."""
+    """将整体摘要与分类摘要输出到标准输出。"""
     if not results:
         print("No results.")
         return
@@ -244,7 +244,7 @@ def print_summary(results: list[EvalResult]) -> None:
     print(f"  Avg latency:   {avg_latency:.0f}ms")
     print(f"{'='*60}")
 
-    # Per-category breakdown
+    # 按分类拆分统计
     cats: dict[str, list[EvalResult]] = {}
     for r in results:
         cats.setdefault(r.category, []).append(r)
@@ -257,7 +257,7 @@ def print_summary(results: list[EvalResult]) -> None:
             cat_avg = sum(r.score for r in cat_results) / max(cat_total, 1)
             print(f"    {cat}: {cat_passed}/{cat_total} ({100*cat_passed/max(cat_total,1):.0f}%) avg={cat_avg:.2f}")
 
-    # Individual results
+    # 各 case 的单独结果
     print(f"\n  {'─'*56}")
     for r in results:
         status = "✅" if r.passed else "❌"
@@ -272,7 +272,7 @@ def print_summary(results: list[EvalResult]) -> None:
 
 
 def save_results(results: list[EvalResult], path: str | Path) -> None:
-    """Save results to JSON file."""
+    """将结果保存为 JSON 文件。"""
     out = []
     for r in results:
         out.append({
@@ -293,7 +293,7 @@ def save_results(results: list[EvalResult], path: str | Path) -> None:
     logger.info("Results saved to %s", path)
 
 
-# ── CLI entry point ───────────────────────────────────────────────
+# ── CLI 入口 ──────────────────────────────────────────────────────
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run eval benchmark")
@@ -332,10 +332,10 @@ def main() -> None:
         jm = args.judge_model or args.model
         judge_model = OpenAICompatModel(api_key=api_key, base_url=args.base_url, model=jm)
 
-    # Build tools — import fs_agent tools
+    # 构建工具 —— 导入 fs_agent 工具模块
     from fs_agent.tools.file_tools import registry as file_registry
-    import fs_agent.tools.doc_tools      # noqa: F401 — registers on file_registry
-    import fs_agent.tools.advanced_tools  # noqa: F401
+    import fs_agent.tools.doc_tools      # noqa: F401 — 导入后会自动注册到 file_registry
+    import fs_agent.tools.advanced_tools  # noqa: F401 — 导入后会自动注册到 file_registry
 
     results = asyncio.run(run_eval(
         cases=cases,

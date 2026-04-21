@@ -1,5 +1,7 @@
-"""Tests for Tool Runtime: registry, schema generation, error handling."""
+"""工具运行时测试：注册表、schema 生成与错误处理。"""
 import asyncio
+from typing import Optional
+
 import pytest
 
 from scaffold.tools.registry import ToolRegistry
@@ -11,10 +13,10 @@ from scaffold.models.base import ToolCall
 class TestSchemaGeneration:
     def test_basic_function(self):
         def greet(name: str, loud: bool = False) -> str:
-            """Say hello.
+            """打招呼。
 
-            name: Person's name.
-            loud: Whether to shout.
+            name: 对方的名字。
+            loud: 是否大声喊出来。
             """
             return f"Hello, {name}!"
 
@@ -27,7 +29,7 @@ class TestSchemaGeneration:
 
     def test_openai_format(self):
         def add(a: int, b: int) -> int:
-            """Add two numbers."""
+            """将两个数字相加。"""
             return a + b
 
         schema = schema_from_function(add)
@@ -36,6 +38,27 @@ class TestSchemaGeneration:
         assert oai["function"]["name"] == "add"
         assert oai["function"]["parameters"]["properties"]["a"]["type"] == "integer"
 
+    def test_optional_annotations(self):
+        def find_file(path: Optional[str], parent: Optional[str] = None) -> str:
+            """查找文件。
+
+            path: 要定位的文件路径。
+            parent: 可选的父目录。
+            """
+            return path or parent or ""
+
+        schema = schema_from_function(find_file)
+        path_schema = schema.parameters["properties"]["path"]
+        parent_schema = schema.parameters["properties"]["parent"]
+
+        assert path_schema["type"] == "string"
+        assert path_schema["nullable"] is True
+        assert "path" in schema.parameters["required"]
+
+        assert parent_schema["type"] == "string"
+        assert parent_schema["nullable"] is True
+        assert "parent" not in schema.parameters["required"]
+
 
 class TestToolRegistry:
     def test_register_and_execute(self):
@@ -43,7 +66,7 @@ class TestToolRegistry:
 
         @reg.tool
         def echo(text: str) -> str:
-            """Echo the input."""
+            """回显输入内容。"""
             return text
 
         assert "echo" in reg.list_names()
@@ -65,7 +88,7 @@ class TestToolRegistry:
 
         @reg.tool
         def fail_tool(x: str) -> str:
-            """Always fails."""
+            """总是失败。"""
             raise ToolError(ToolErrorCode.NOT_FOUND, "File not found", hint="Check the path.")
 
         call = ToolCall(id="1", name="fail_tool", arguments={"x": "test"})
@@ -79,7 +102,7 @@ class TestToolRegistry:
 
         @reg.tool
         def my_tool(a: str, b: int = 0) -> str:
-            """Do something."""
+            """执行某个操作。"""
             return "ok"
 
         tools = reg.to_openai_tools()
@@ -94,7 +117,7 @@ class TestToolErrors:
         msg = err.for_model()
         assert "[not_found]" in msg
         assert "File X not found" in msg
-        assert "Hint:" in msg  # default hint
+        assert "Hint:" in msg  # 默认提示
 
     def test_custom_hint(self):
         err = ToolError(ToolErrorCode.INTERNAL_ERROR, "Oops", hint="Try again later")

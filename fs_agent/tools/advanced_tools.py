@@ -1,7 +1,7 @@
-"""Advanced agent tools — cross-document Q&A, file organization, tagging.
+"""高级 Agent 工具 —— 跨文档问答、文件整理与打标签。
 
-These tools orchestrate multiple lower-level tools to provide higher-level
-capabilities. They work alongside the LLM's own reasoning.
+这些工具会编排多个底层工具，以提供更高层次的能力，
+并与 LLM 自身的推理过程协同工作。
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from fs_agent.tools.file_tools import registry, _check_sandbox
 
 
 # ---------------------------------------------------------------------------
-# Tool: organize_files
+# 工具：organize_files
 # ---------------------------------------------------------------------------
 
 @registry.tool
@@ -24,14 +24,14 @@ def organize_files(
     strategy: str = "extension",
     dry_run: bool = True,
 ) -> str:
-    """Plan or execute file organization in a directory.
+    """规划或执行目录中的文件整理。
 
-    Creates a plan to organize files by extension, date, or size.
-    Always returns the plan first. Set dry_run=False to execute.
+    可按扩展名、日期或大小生成整理方案。
+    默认先返回方案；将 `dry_run=False` 时才真正执行。
 
-    source: Directory containing files to organize.
-    strategy: Organization strategy — 'extension' (by file type), 'date' (by modification month), 'size' (small/medium/large).
-    dry_run: If true, only show the plan without moving files. Set to false to execute.
+    source: 需要整理文件的目录。
+    strategy: 整理策略 —— `extension`（按类型）、`date`（按修改月份）、`size`（按 small/medium/large）。
+    dry_run: 为 true 时只展示计划而不移动文件；设为 false 才执行。
     """
     resolved = _check_sandbox(source)
     if not resolved.is_dir():
@@ -54,7 +54,7 @@ def organize_files(
     if not plan:
         return "All files are already organized."
 
-    # Format plan
+    # 格式化整理方案
     lines = [f"Organization plan ({strategy} strategy): {len(plan)} moves"]
     for item in plan:
         lines.append(f"  {item['file']} → {item['destination']}")
@@ -62,7 +62,7 @@ def organize_files(
     if dry_run:
         lines.append("\n[DRY RUN] No files were moved. Set dry_run=False to execute.")
     else:
-        # Execute moves
+        # 执行移动操作
         moved = 0
         for item in plan:
             src = resolved / item["file"]
@@ -77,18 +77,18 @@ def organize_files(
 
 
 # ---------------------------------------------------------------------------
-# Tool: tag_files
+# 工具：tag_files
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def tag_files(path: str, tags: str, tags_file: str = ".file_tags.json") -> str:
-    """Add tags/labels to a file for categorization.
+    """为文件添加标签，便于分类。
 
-    Tags are stored in a JSON file in the workspace root.
+    标签会存储在工作区根目录下的 JSON 文件中。
 
-    path: Path to the file to tag.
-    tags: Comma-separated list of tags (e.g. 'important,review,rlhf').
-    tags_file: Path to the tags database file.
+    path: 需要打标签的文件路径。
+    tags: 以逗号分隔的标签列表（例如 `important,review,rlhf`）。
+    tags_file: 标签数据库文件路径。
     """
     resolved = _check_sandbox(path)
     if not resolved.exists():
@@ -112,15 +112,15 @@ def tag_files(path: str, tags: str, tags_file: str = ".file_tags.json") -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool: search_by_tag
+# 工具：search_by_tag
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def search_by_tag(tag: str, tags_file: str = ".file_tags.json") -> str:
-    """Find all files with a specific tag.
+    """查找带有指定标签的所有文件。
 
-    tag: The tag to search for.
-    tags_file: Path to the tags database file.
+    tag: 要搜索的标签。
+    tags_file: 标签数据库文件路径。
     """
     tags_path = _check_sandbox(tags_file)
     if not tags_path.exists():
@@ -140,19 +140,18 @@ def search_by_tag(tag: str, tags_file: str = ".file_tags.json") -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool: compare_files
+# 工具：compare_files
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def compare_files(path1: str, path2: str, context_lines: int = 3) -> str:
-    """Compare two text files and show their differences.
+    """比较两个文本文件并展示差异。
 
-    Useful for understanding changes between versions or finding differences
-    between similar documents.
+    适合用来理解版本变更，或比较相似文档之间的区别。
 
-    path1: Path to the first file.
-    path2: Path to the second file.
-    context_lines: Number of context lines around each difference.
+    path1: 第一个文件的路径。
+    path2: 第二个文件的路径。
+    context_lines: 每处差异周围保留的上下文行数。
     """
     r1 = _check_sandbox(path1)
     r2 = _check_sandbox(path2)
@@ -180,7 +179,7 @@ def compare_files(path1: str, path2: str, context_lines: int = 3) -> str:
     if not diff:
         return f"Files are identical: {r1.name} and {r2.name}"
 
-    # Truncate very large diffs
+    # 截断过大的 diff
     diff_text = "".join(diff[:200])
     header = f"Differences between {r1.name} and {r2.name}:\n"
     if len(diff) > 200:
@@ -189,7 +188,7 @@ def compare_files(path1: str, path2: str, context_lines: int = 3) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
+# 内部辅助函数
 # ---------------------------------------------------------------------------
 
 def _plan_by_extension(files: list[Path], root: Path) -> list[dict[str, str]]:

@@ -1,10 +1,10 @@
-"""ContextWindow — the top-level manager that assembles messages for the LLM.
+"""ContextWindow —— 为 LLM 组装消息的顶层管理器。
 
-Responsibilities:
-- Maintain ordered message history
-- Apply compression when budget exceeded
-- Support phase-aware dynamic system prompts
-- Assemble final prompt with KV-cache-friendly layout:
+职责：
+- 维护有序的消息历史
+- 在预算超限时执行压缩
+- 支持按阶段切换的动态 system prompt
+- 以适合 KV cache 的布局组装最终提示词：
     [system prompt (stable)] → [tool schemas (stable)] → [history (dynamic)]
 """
 from __future__ import annotations
@@ -21,17 +21,17 @@ from scaffold.context.compression import (
 
 
 class AgentPhase(str, Enum):
-    """Agent execution phase — different phases get different system prompts."""
+    """Agent 的执行阶段 —— 不同阶段可对应不同的 system prompt。"""
     PLANNING = "planning"
     EXECUTION = "execution"
     REFLECTION = "reflection"
 
 
 class DynamicPrompt:
-    """Phase-aware system prompt manager.
+    """具备阶段感知能力的 system prompt 管理器。
 
-    Allows registering different prompt templates per phase.
-    The stable prefix (shared across phases) stays at the top for KV-cache friendliness.
+    允许为不同阶段注册不同的提示词模板。
+    各阶段共享的稳定前缀会固定放在最前面，以提升 KV cache 友好性。
     """
 
     def __init__(self, base_prompt: str) -> None:
@@ -40,7 +40,7 @@ class DynamicPrompt:
         self._current_phase = AgentPhase.EXECUTION
 
     def set_phase_prompt(self, phase: AgentPhase, section: str) -> None:
-        """Register an additional prompt section for a specific phase."""
+        """为指定阶段注册一段额外提示词。"""
         self._phase_sections[phase] = section
 
     @property
@@ -52,10 +52,10 @@ class DynamicPrompt:
         self._current_phase = value
 
     def render(self) -> str:
-        """Build the full system prompt for the current phase.
+        """构造当前阶段的完整 system prompt。
 
-        Layout: base_prompt + phase-specific section (if any).
-        Base prompt is always the prefix → maximises prefix cache hit.
+        布局：基础提示词 + 当前阶段专属段落（如果存在）。
+        基础提示词始终作为前缀，从而尽量提高前缀缓存命中率。
         """
         parts = [self._base]
         section = self._phase_sections.get(self._current_phase)
@@ -65,7 +65,7 @@ class DynamicPrompt:
 
 
 class ContextWindow:
-    """Manages the full conversation context for one agent run."""
+    """管理单次 agent 运行的完整对话上下文。"""
 
     def __init__(
         self,
@@ -90,7 +90,7 @@ class ContextWindow:
 
     @property
     def prompt(self) -> DynamicPrompt:
-        """Access the dynamic prompt manager."""
+        """访问动态提示词管理器。"""
         return self._dynamic_prompt
 
     def add(self, message: Message) -> None:
@@ -104,13 +104,13 @@ class ContextWindow:
         return list(self._messages)
 
     def build_prompt(self) -> list[Message]:
-        """Assemble the full prompt for the LLM.
+        """为 LLM 组装完整提示词。
 
-        Layout (KV-cache friendly):
-        1. System prompt (stable prefix — maximizes prefix cache hit)
-        2. Conversation history (compressed if needed)
+        布局（对 KV cache 友好）：
+        1. System prompt（稳定前缀，提升前缀缓存命中率）
+        2. 对话历史（必要时进行压缩）
         """
-        # Check if compression needed
+        # 检查是否需要压缩
         history_text = "".join(
             (m.content or "") for m in self._messages
         )
@@ -129,11 +129,11 @@ class ContextWindow:
         return [Message.system(system_text)] + history
 
     def update_system_prompt(self, new_prompt: str) -> None:
-        """Replace the base system prompt text."""
+        """替换基础 system prompt 文本。"""
         self._dynamic_prompt = DynamicPrompt(new_prompt)
 
     def set_phase(self, phase: AgentPhase) -> None:
-        """Switch the agent phase (updates system prompt accordingly)."""
+        """切换 agent 阶段（并相应更新 system prompt）。"""
         self._dynamic_prompt.phase = phase
 
     def clear(self) -> None:

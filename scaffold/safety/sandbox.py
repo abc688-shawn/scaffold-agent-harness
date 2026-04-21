@@ -1,4 +1,4 @@
-"""Path sandbox — confine file operations to allowed directories."""
+"""路径沙箱 —— 将文件操作限制在允许的目录内。"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,16 +7,16 @@ from scaffold.tools.errors import ToolError, ToolErrorCode
 
 
 class PathSandbox:
-    """Restricts file-system paths to a whitelist of directories."""
+    """将文件系统路径限制在白名单目录之内。"""
 
     def __init__(self, allowed_roots: list[str | Path]) -> None:
         self._roots = [Path(r).resolve() for r in allowed_roots]
 
     def validate(self, path: str | Path) -> Path:
-        """Resolve *path* and verify it falls inside an allowed root.
+        """解析 *path*，并验证它是否位于允许的根目录内。
 
-        Returns the resolved Path on success.
-        Raises ToolError on violation.
+        成功时返回解析后的 Path。
+        如果违反约束则抛出 ToolError。
         """
         resolved = Path(path).resolve()
         for root in self._roots:

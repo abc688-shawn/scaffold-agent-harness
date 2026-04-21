@@ -1,10 +1,8 @@
-"""Prompt injection defense.
+"""提示词注入防护。
 
-Two-pronged approach:
-1. Wrap tool results in <tool_result> tags so the model can distinguish
-   tool output from instructions.
-2. System prompt explicitly instructs the model to ignore instructions
-   found inside tool results.
+双重防护策略：
+1. 用 `<tool_result>` 标签包裹工具结果，让模型区分工具输出和指令。
+2. 在 system prompt 中显式要求模型忽略工具结果中的指令内容。
 """
 from __future__ import annotations
 
@@ -20,8 +18,8 @@ INJECTION_DEFENSE_PROMPT = (
 
 
 def sanitize_tool_result(content: str) -> str:
-    """Wrap tool output in safety tags and escape any nested tags."""
-    # Escape existing tags to prevent injection via nested tags
+    """用安全标签包裹工具输出，并转义内部可能嵌套的标签。"""
+    # 转义已有标签，防止通过嵌套标签实施注入
     escaped = content.replace("<tool_result>", "&lt;tool_result&gt;")
     escaped = escaped.replace("</tool_result>", "&lt;/tool_result&gt;")
     return f"<tool_result>\n{escaped}\n</tool_result>"

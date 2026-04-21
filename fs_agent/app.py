@@ -1,12 +1,12 @@
-"""Scaffold fs-agent — interactive web chat UI.
+"""Scaffold fs-agent —— 交互式网页聊天界面。
 
-Launch:
+启动方式：
     streamlit run fs_agent/app.py
 
-Features:
-- Upload documents (PDF, DOCX, TXT, CSV, etc.) to a persistent local library
-- Chat with the fs-agent about your files
-- Sidebar shows API config, document library, and per-turn token stats
+功能：
+- 将文档（PDF、DOCX、TXT、CSV 等）上传到本地持久化文档库
+- 围绕你的文件与 fs-agent 对话
+- 侧边栏展示 API 配置、文档库与每轮 token 统计
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-# Load .env so API credentials don't need to be set manually each time
+# 加载 .env，避免每次都手动填写 API 凭据
 try:
     from dotenv import load_dotenv
     load_dotenv(Path(__file__).parent.parent / ".env", override=False)
@@ -29,7 +29,7 @@ except ImportError:
     sys.exit(1)
 
 # ---------------------------------------------------------------------------
-# Page config — must be first Streamlit call
+# 页面配置 —— 必须是第一次 Streamlit 调用
 # ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="Scaffold fs-agent",
@@ -38,16 +38,16 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Default persistent document library — lives at project root
+# 默认的持久化文档库目录 —— 位于项目根目录
 _DEFAULT_WORKSPACE = Path(__file__).parent.parent / "workspace"
 
 # ---------------------------------------------------------------------------
-# Session state helpers
+# Session state 辅助函数
 # ---------------------------------------------------------------------------
 
 def _init_state() -> None:
     if "messages" not in st.session_state:
-        st.session_state.messages = []   # list of {"role", "content", "meta"}
+        st.session_state.messages = []   # 形如 {"role", "content", "meta"} 的消息列表
     if "total_tokens" not in st.session_state:
         st.session_state.total_tokens = 0
     if "total_steps" not in st.session_state:
@@ -56,14 +56,14 @@ def _init_state() -> None:
 _init_state()
 
 # ---------------------------------------------------------------------------
-# Sidebar — config & file upload
+# 侧边栏 —— 配置与文件上传
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.title("🗂 fs-agent")
     st.caption("Scaffold · Agent Harness Demo")
     st.divider()
 
-    # ── API Configuration ────────────────────────────────────────────────
+    # ── API 配置 ────────────────────────────────────────────────────────
     st.subheader("API 配置")
     api_key = st.text_input(
         "API Key",
@@ -91,7 +91,7 @@ with st.sidebar:
 
     st.divider()
 
-    # ── Document Library ─────────────────────────────────────────────────
+    # ── 文档库 ──────────────────────────────────────────────────────────
     st.subheader("文档库")
 
     workspace_input = st.text_input(
@@ -108,14 +108,14 @@ with st.sidebar:
         type=["pdf", "docx", "txt", "csv", "json", "md", "yaml", "yml", "py", "js", "ts"],
     )
 
-    # Save uploaded files to the persistent workspace
+    # 将上传文件保存到持久化工作区
     if uploaded:
         for uf in uploaded:
             dest = workspace_path / uf.name
-            dest.write_bytes(uf.read())   # overwrite = update existing file
+            dest.write_bytes(uf.read())   # 覆盖写入，等价于更新已有文件
             st.toast(f"已保存: {uf.name}", icon="✅")
 
-    # List all files in library
+    # 列出文档库中的所有文件
     all_files = sorted(
         f for f in workspace_path.rglob("*") if f.is_file() and not f.name.startswith(".")
     )
@@ -136,7 +136,7 @@ with st.sidebar:
 
     st.divider()
 
-    # ── Stats ────────────────────────────────────────────────────────────
+    # ── 统计信息 ────────────────────────────────────────────────────────
     st.subheader("会话统计")
     col1, col2 = st.columns(2)
     col1.metric("总 Tokens", f"{st.session_state.total_tokens:,}")
@@ -149,13 +149,13 @@ with st.sidebar:
         st.rerun()
 
 # ---------------------------------------------------------------------------
-# Agent builder (cached per config)
+# Agent 构建器（按配置缓存）
 # ---------------------------------------------------------------------------
 
 @st.cache_resource(hash_funcs={"builtins.str": lambda s: s})
 def _build_agent_components(api_key: str, api_base: str, model: str,
                              workspace: str, permission_level: str, max_steps: int):
-    """Build and return the agent components. Cached until config changes."""
+    """构建并返回 agent 组件；在配置变化前都会复用缓存。"""
     from scaffold.models.openai_compat import OpenAICompatModel
     from scaffold.context.window import ContextWindow
     from scaffold.context.budget import TokenBudget
@@ -164,10 +164,10 @@ def _build_agent_components(api_key: str, api_base: str, model: str,
     from scaffold.safety.injection import INJECTION_DEFENSE_PROMPT
     from fs_agent.tools.file_tools import registry, set_sandbox
     from fs_agent.policies.permissions import PermissionLevel, FSPermissionGuard
-    import fs_agent.tools.doc_tools       # noqa: F401
-    import fs_agent.tools.advanced_tools  # noqa: F401
+    import fs_agent.tools.doc_tools       # noqa: F401 — 导入即完成工具注册
+    import fs_agent.tools.advanced_tools  # noqa: F401 — 导入即完成工具注册
     try:
-        import fs_agent.tools.search_tools  # noqa: F401
+        import fs_agent.tools.search_tools  # noqa: F401 — 若依赖存在则注册搜索工具
     except ImportError:
         pass
 
@@ -207,12 +207,12 @@ def _build_agent_components(api_key: str, api_base: str, model: str,
 
 
 # ---------------------------------------------------------------------------
-# Main chat area
+# 主聊天区域
 # ---------------------------------------------------------------------------
 st.title("🗂 Scaffold fs-agent")
 st.caption(f"文档库：`{workspace_path}` · 模型：`{model_name}`")
 
-# Render existing messages
+# 渲染已有消息
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
@@ -224,7 +224,7 @@ for msg in st.session_state.messages:
                 f"(prompt {meta.get('prompt_tokens', 0):,} + completion {meta.get('completion_tokens', 0):,})"
             )
 
-# Chat input
+# 聊天输入框
 user_input = st.chat_input("问我关于你文件的任何问题…")
 
 if user_input:
@@ -232,12 +232,12 @@ if user_input:
         st.error("请在左侧侧边栏填写 API Key。")
         st.stop()
 
-    # Show user message immediately
+    # 立即展示用户消息
     with st.chat_message("user"):
         st.markdown(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # Run agent
+    # 运行 agent
     with st.chat_message("assistant"):
         status_box = st.status("Agent 思考中…", expanded=True)
         answer_placeholder = st.empty()
@@ -257,12 +257,12 @@ if user_input:
             from scaffold.observability.tracer import Tracer
             from scaffold.observability.storage import TraceStorage
 
-            # Rebuild context each turn (fresh per question, multi-turn via message history)
+            # 每轮重建上下文（每个问题使用新的上下文，多轮效果通过历史消息注入实现）
             context = ContextWindow(system_prompt=system_prompt, budget=budget)
 
-            # Inject prior conversation as context
+            # 将既有对话注入为上下文
             from scaffold.models.base import Message
-            for prev in st.session_state.messages[:-1]:  # exclude current user msg
+            for prev in st.session_state.messages[:-1]:  # 排除当前这条用户消息
                 if prev["role"] == "user":
                     context.add(Message.user(prev["content"]))
                 elif prev["role"] == "assistant":
@@ -277,7 +277,7 @@ if user_input:
                 tracer=tracer,
             )
 
-            # Show live tool call updates in status box
+            # 在状态框中实时显示工具调用进度
             _original_execute = registry.execute
 
             async def _traced_execute(call):
@@ -290,14 +290,14 @@ if user_input:
 
             result = asyncio.run(loop.run(user_input))
 
-            registry.execute = _original_execute  # restore
+            registry.execute = _original_execute  # 恢复原始实现
 
             status_box.update(label="完成", state="complete", expanded=False)
 
             final_answer = result.final_message or "(Agent 未返回文本回复)"
             answer_placeholder.markdown(final_answer)
 
-            # Token stats
+            # Token 统计
             usage = result.total_usage
             st.caption(
                 f"步数：{result.steps}  |  "
@@ -305,11 +305,11 @@ if user_input:
                 f"(prompt {usage.prompt_tokens:,} + completion {usage.completion_tokens:,})"
             )
 
-            # Update session totals
+            # 更新会话累计统计
             st.session_state.total_tokens += usage.total_tokens
             st.session_state.total_steps += result.steps
 
-            # Persist message
+            # 持久化消息
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": final_answer,
@@ -321,7 +321,7 @@ if user_input:
                 },
             })
 
-            # Save trace
+            # 保存追踪信息
             try:
                 trace_storage = TraceStorage("traces.db")
                 trace_storage.save_trace(tracer, metadata={

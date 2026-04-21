@@ -1,4 +1,4 @@
-"""Tests for cache layer."""
+"""缓存层测试。"""
 import time
 import pytest
 
@@ -32,8 +32,8 @@ class TestResultCache:
     def test_stats(self):
         cache = ResultCache()
         cache.put("k", "v")
-        cache.get("k")  # hit
-        cache.get("missing")  # miss
+        cache.get("k")  # 命中
+        cache.get("missing")  # 未命中
         stats = cache.stats
         assert stats["hits"] == 1
         assert stats["misses"] == 1

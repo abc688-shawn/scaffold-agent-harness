@@ -1,10 +1,10 @@
-"""Semantic search tools — embedding-based retrieval for the file workspace.
+"""语义搜索工具 —— 基于 embedding 的工作区检索。
 
-Uses a lightweight in-memory vector store. Embeddings are computed lazily
-(on first search) or explicitly via index_workspace.
+使用轻量级内存向量库。Embedding 可以懒加载计算
+（首次搜索时）或通过 `index_workspace` 显式建立。
 
-Supports pluggable embedding backends; default uses the OpenAI-compatible
-embedding endpoint (works with DeepSeek, etc.).
+支持可插拔的 embedding 后端；默认使用 OpenAI 兼容的
+embedding 接口（也适用于 DeepSeek 等服务）。
 """
 from __future__ import annotations
 
@@ -21,12 +21,12 @@ from fs_agent.tools.file_tools import registry, _check_sandbox
 
 
 # ---------------------------------------------------------------------------
-# Vector store (lightweight, in-memory, pickle-persisted)
+# 向量库（轻量、内存型、可用 pickle 持久化）
 # ---------------------------------------------------------------------------
 
 @dataclass
 class Chunk:
-    """A text chunk with its embedding and source info."""
+    """带有 embedding 和来源信息的文本分块。"""
     text: str
     file_path: str
     start_line: int
@@ -36,11 +36,11 @@ class Chunk:
 
 
 class VectorStore:
-    """Simple in-memory vector store with cosine similarity search."""
+    """支持余弦相似度搜索的简单内存向量库。"""
 
     def __init__(self) -> None:
         self._chunks: list[Chunk] = []
-        self._file_hashes: dict[str, str] = {}  # path -> hash
+        self._file_hashes: dict[str, str] = {}  # 文件路径 -> 内容哈希
 
     def add(self, chunk: Chunk) -> None:
         self._chunks.append(chunk)
@@ -99,11 +99,11 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Embedding client
+# Embedding 客户端
 # ---------------------------------------------------------------------------
 
 class EmbeddingClient:
-    """OpenAI-compatible embedding client."""
+    """OpenAI 兼容的 embedding 客户端。"""
 
     def __init__(
         self,
@@ -116,7 +116,7 @@ class EmbeddingClient:
         self._model = model
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        """Embed a batch of texts."""
+        """为一批文本计算 embedding。"""
         try:
             from openai import AsyncOpenAI
         except ImportError:
@@ -132,11 +132,11 @@ class EmbeddingClient:
 
 
 # ---------------------------------------------------------------------------
-# Chunking
+# 文本分块
 # ---------------------------------------------------------------------------
 
 def chunk_text(text: str, file_path: str, chunk_size: int = 500, overlap: int = 50) -> list[Chunk]:
-    """Split text into overlapping chunks by lines."""
+    """按行将文本切分为带重叠区域的多个块。"""
     lines = text.splitlines()
     if not lines:
         return []
@@ -161,7 +161,7 @@ def chunk_text(text: str, file_path: str, chunk_size: int = 500, overlap: int = 
 
 
 # ---------------------------------------------------------------------------
-# Module-level state (configured at startup)
+# 模块级状态（启动时配置）
 # ---------------------------------------------------------------------------
 
 _store = VectorStore()
@@ -181,19 +181,19 @@ def configure_search(
 
 
 # ---------------------------------------------------------------------------
-# Tool: index_files
+# 工具：index_files
 # ---------------------------------------------------------------------------
 
 @registry.tool
 async def index_files(path: str = ".", pattern: str = "*.py", recursive: bool = True) -> str:
-    """Index files for semantic search. Call this before using semantic_search.
+    """为语义搜索建立文件索引。使用 `semantic_search` 前应先调用它。
 
-    Scans files, splits into chunks, and computes embeddings.
-    Already-indexed files (unchanged) are skipped.
+    它会扫描文件、切分文本块并计算 embedding。
+    已经建立索引且内容未变化的文件会被跳过。
 
-    path: Directory to index.
-    pattern: Glob pattern for files to index (e.g. '*.py', '*.md', '*.txt').
-    recursive: Whether to search subdirectories.
+    path: 要建立索引的目录。
+    pattern: 需要索引的文件 glob 模式（例如 `*.py`、`*.md`、`*.txt`）。
+    recursive: 是否递归搜索子目录。
     """
     if _embed_client is None:
         raise ToolError(ToolErrorCode.INTERNAL, "Embedding client not configured.")
@@ -222,10 +222,10 @@ async def index_files(path: str = ".", pattern: str = "*.py", recursive: bool = 
                 skipped += 1
                 continue
 
-            # Remove old chunks for this file
+            # 移除该文件的旧分块
             _store.remove_file(rel_path)
 
-            # Chunk and embed
+            # 切分并计算 embedding
             chunks = chunk_text(text, rel_path)
             if not chunks:
                 continue
@@ -242,7 +242,7 @@ async def index_files(path: str = ".", pattern: str = "*.py", recursive: bool = 
         except Exception:
             errors += 1
 
-    # Persist index
+    # 持久化索引
     if _index_path:
         _store.save(_index_path)
 
@@ -253,20 +253,20 @@ async def index_files(path: str = ".", pattern: str = "*.py", recursive: bool = 
 
 
 # ---------------------------------------------------------------------------
-# Tool: semantic_search
+# 工具：semantic_search
 # ---------------------------------------------------------------------------
 
 @registry.tool
 async def semantic_search(query: str, top_k: int = 5) -> str:
-    """Search indexed files by meaning (semantic similarity).
+    """按语义相似度搜索已建立索引的文件内容。
 
-    Use this when keyword search (search_files) misses relevant results,
-    or when the query is conceptual rather than a literal string match.
+    当关键词搜索（`search_files`）找不到相关结果，
+    或查询更偏概念性而非字面字符串匹配时，适合使用它。
 
-    Requires index_files to be called first.
+    使用前需要先调用 `index_files`。
 
-    query: Natural language query describing what you're looking for.
-    top_k: Number of results to return.
+    query: 用自然语言描述你要找的内容。
+    top_k: 返回结果数量。
     """
     if _embed_client is None:
         raise ToolError(ToolErrorCode.INTERNAL, "Embedding client not configured.")

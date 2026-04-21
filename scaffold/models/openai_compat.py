@@ -1,9 +1,9 @@
-"""OpenAI-compatible adapter.
+"""OpenAI 兼容适配器。
 
-Works with any provider that exposes an OpenAI-style /chat/completions
-endpoint: DeepSeek, GLM (Zhipu), MiniMax M2, Moonshot, etc.
+适用于任何暴露 OpenAI 风格 `/chat/completions` 端点的提供商，
+例如 DeepSeek、GLM（智谱）、MiniMax M2、Moonshot 等。
 
-Usage:
+用法：
     model = OpenAICompatModel(
         api_key="sk-xxx",
         base_url="https://api.deepseek.com/v1",
@@ -34,13 +34,13 @@ from scaffold.models.base import (
 
 logger = logging.getLogger(__name__)
 
-# Retriable HTTP error codes from openai SDK
+# 来自 openai SDK 的可重试 HTTP 错误类型
 _RETRIABLE = (
-    Exception,  # will narrow below
+    Exception,  # 下面会进一步收窄
 )
 
 def _is_retriable(exc: BaseException) -> bool:
-    """Return True for transient errors worth retrying."""
+    """如果是值得重试的瞬时错误，则返回 True。"""
     from openai import (
         APITimeoutError,
         APIConnectionError,
@@ -51,7 +51,7 @@ def _is_retriable(exc: BaseException) -> bool:
 
 
 class OpenAICompatModel(ChatModel):
-    """Adapter for OpenAI-compatible chat/completions APIs."""
+    """适配 OpenAI 兼容 chat/completions API 的模型适配器。"""
 
     def __init__(
         self,
@@ -67,16 +67,16 @@ class OpenAICompatModel(ChatModel):
             api_key=api_key,
             base_url=base_url,
             timeout=timeout,
-            max_retries=0,  # we handle retries ourselves via tenacity
+            max_retries=0,  # 重试由 tenacity 统一处理
         )
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # 内部辅助方法
     # ------------------------------------------------------------------
 
     @staticmethod
     def _to_openai_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
-        """Convert neutral Messages → OpenAI wire format."""
+        """将中立 Message 转换为 OpenAI 线协议格式。"""
         out: list[dict[str, Any]] = []
         for m in messages:
             d: dict[str, Any] = {"role": m.role.value}
@@ -116,7 +116,7 @@ class OpenAICompatModel(ChatModel):
         return result
 
     # ------------------------------------------------------------------
-    # Public API
+    # 对外公开接口
     # ------------------------------------------------------------------
 
     @retry(
@@ -193,7 +193,7 @@ class OpenAICompatModel(ChatModel):
 
         stream = await self._client.chat.completions.create(**api_kwargs)
 
-        # Accumulate tool calls across chunks
+        # 跨多个 chunk 累积工具调用
         accumulated_tool_calls: dict[int, dict[str, Any]] = {}
         accumulated_content = ""
         finish_reason = None
@@ -209,7 +209,7 @@ class OpenAICompatModel(ChatModel):
             if delta.content:
                 accumulated_content += delta.content
 
-            # Stream tool call argument fragments
+            # 累积流式返回的工具调用参数片段
             if delta.tool_calls:
                 for tc_delta in delta.tool_calls:
                     idx = tc_delta.index
@@ -232,7 +232,7 @@ class OpenAICompatModel(ChatModel):
                 prompt_tokens = chunk.usage.prompt_tokens
                 completion_tokens = chunk.usage.completion_tokens
 
-        # Build final response
+        # 构造最终响应
         tool_calls = None
         if accumulated_tool_calls:
             tool_calls = []

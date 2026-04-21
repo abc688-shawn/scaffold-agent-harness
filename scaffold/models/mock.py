@@ -1,6 +1,6 @@
-"""Mock model for testing and eval replay.
+"""用于测试和评估回放的 Mock 模型。
 
-Usage:
+用法：
     model = MockModel(script=[
         ModelResponse(message=Message.assistant("Hello!")),
         ModelResponse(message=Message.assistant(
@@ -21,7 +21,7 @@ from scaffold.models.base import (
 
 
 class MockModel(ChatModel):
-    """Returns pre-scripted responses in order.  Useful for deterministic tests."""
+    """按顺序返回预先写好的响应，适合做确定性测试。"""
 
     def __init__(self, script: list[ModelResponse] | None = None) -> None:
         self._script = list(script or [])

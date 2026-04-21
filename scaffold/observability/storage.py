@@ -1,4 +1,4 @@
-"""SQLite-backed trace storage."""
+"""基于 SQLite 的追踪存储。"""
 from __future__ import annotations
 
 import json
@@ -36,7 +36,7 @@ CREATE INDEX IF NOT EXISTS idx_spans_run ON spans(run_id);
 
 
 class TraceStorage:
-    """Persist traces to a local SQLite database."""
+    """将追踪数据持久化到本地 SQLite 数据库。"""
 
     def __init__(self, db_path: str | Path = "traces.db") -> None:
         self._db_path = str(db_path)

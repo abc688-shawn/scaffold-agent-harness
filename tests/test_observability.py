@@ -1,4 +1,4 @@
-"""Tests for observability: tracer and storage."""
+"""可观测性测试：tracer 与 storage。"""
 import time
 import pytest
 from pathlib import Path

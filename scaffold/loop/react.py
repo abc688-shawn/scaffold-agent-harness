@@ -1,14 +1,14 @@
-"""ReAct agent loop.
+"""ReAct agent 循环。
 
-Implements the Reasoning + Acting loop:
-    1. Send messages to LLM
-    2. If LLM returns tool_calls → execute tools → append results → goto 1
-    3. If LLM returns text → done
+实现了“推理 + 行动”的循环：
+    1. 向 LLM 发送消息
+    2. 如果 LLM 返回 `tool_calls` → 执行工具 → 追加结果 → 回到第 1 步
+    3. 如果 LLM 返回文本 → 结束
 
-Features:
-- Dual budget: max steps + max tokens
-- Loop detection: 3 consecutive similar tool calls → inject reflection
-- Interrupt & resume via serializable state
+特性：
+- 双重预算：最大步数 + 最大 token 数
+- 循环检测：连续 3 次相似工具调用时注入反思提示
+- 通过可序列化状态实现中断与恢复
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class LoopConfig:
 
 @dataclass
 class LoopResult:
-    """Final result of an agent run."""
+    """一次 agent 运行的最终结果。"""
     final_message: str | None
     steps: int
     total_usage: Usage
@@ -43,7 +43,7 @@ class LoopResult:
 
 
 class ReActLoop:
-    """Standard ReAct agent loop with budgets and loop detection."""
+    """带预算控制和循环检测的标准 ReAct agent 循环。"""
 
     def __init__(
         self,
@@ -58,11 +58,11 @@ class ReActLoop:
         self._context = context
         self._config = config or LoopConfig()
         self._tracer = tracer
-        self._recent_calls: list[str] = []  # for loop detection
+        self._recent_calls: list[str] = []  # 用于循环检测
         self._total_usage = Usage()
 
     async def run(self, user_message: str) -> LoopResult:
-        """Execute the full agent loop for a user query."""
+        """为一次用户查询执行完整的 agent 循环。"""
         self._context.add(Message.user(user_message))
 
         run_span = None
@@ -77,7 +77,7 @@ class ReActLoop:
                 logger.warning("Token budget exhausted at step %d", step)
                 break
 
-            # --- LLM call ---
+            # --- 调用 LLM ---
             llm_span = None
             if self._tracer:
                 llm_span = self._tracer.start_span(
@@ -103,7 +103,7 @@ class ReActLoop:
             msg = response.message
             self._context.add(msg)
 
-            # --- No tool calls → done ---
+            # --- 没有工具调用，则结束 ---
             if not msg.tool_calls:
                 logger.info("Agent finished at step %d: text response", step)
                 if self._tracer and run_span:
@@ -115,7 +115,7 @@ class ReActLoop:
                     history=self._context.history,
                 )
 
-            # --- Loop detection ---
+            # --- 循环检测 ---
             if self._detect_loop(msg.tool_calls):
                 logger.warning("Loop detected at step %d, injecting reflection", step)
                 reflection = Message.user(
@@ -127,7 +127,7 @@ class ReActLoop:
                 self._recent_calls.clear()
                 continue
 
-            # --- Execute tools ---
+            # --- 执行工具 ---
             for tc in msg.tool_calls:
                 tool_span = None
                 if self._tracer:
@@ -145,7 +145,7 @@ class ReActLoop:
                         "result_length": len(result.content),
                     })
 
-        # Max steps reached
+        # 达到最大步数
         logger.warning("Agent hit max steps (%d)", self._config.max_steps)
         if self._tracer and run_span:
             self._tracer.end_span(run_span, metadata={"steps": step, "max_steps_hit": True})
@@ -158,7 +158,7 @@ class ReActLoop:
         )
 
     def _detect_loop(self, tool_calls: list[ToolCall]) -> bool:
-        """Check if last N calls are suspiciously similar."""
+        """检查最近 N 次调用是否异常相似。"""
         sig = json.dumps(
             [(tc.name, sorted(tc.arguments.items())) for tc in tool_calls],
             sort_keys=True,
@@ -168,5 +168,5 @@ class ReActLoop:
             return False
 
         window = self._recent_calls[-self._config.loop_detect_window:]
-        # Simple exact-match detection; can upgrade to fuzzy later
+        # 当前使用简单的精确匹配检测，后续可以升级为模糊匹配
         return len(set(window)) == 1

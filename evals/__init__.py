@@ -1,1 +1,1 @@
-"""Eval Harness — benchmark runner and judges."""
+"""评测 Harness —— 基准运行器与裁判器。"""

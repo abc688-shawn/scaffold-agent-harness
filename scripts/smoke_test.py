@@ -1,6 +1,6 @@
-"""Smoke test — verify DeepSeek API connectivity and tool calling.
+"""冒烟测试 —— 验证 DeepSeek API 连通性与工具调用能力。
 
-Usage:
+用法：
     python scripts/smoke_test.py
 """
 from __future__ import annotations
@@ -20,15 +20,15 @@ registry = ToolRegistry()
 
 @registry.tool
 def get_weather(city: str) -> str:
-    """Get the current weather for a city.
+    """获取某个城市的当前天气。
 
-    city: Name of the city to check weather for.
+    city: 需要查询天气的城市名。
     """
     return f"The weather in {city} is sunny, 22°C."
 
 
 async def test_basic_chat(model: OpenAICompatModel) -> bool:
-    """Test basic chat completion."""
+    """测试基础对话补全。"""
     print("  [1] Basic chat...", end=" ", flush=True)
     try:
         response = await model.chat(
@@ -43,7 +43,7 @@ async def test_basic_chat(model: OpenAICompatModel) -> bool:
 
 
 async def test_tool_call(model: OpenAICompatModel) -> bool:
-    """Test tool calling."""
+    """测试工具调用。"""
     print("  [2] Tool call...", end=" ", flush=True)
     try:
         response = await model.chat(
@@ -63,7 +63,7 @@ async def test_tool_call(model: OpenAICompatModel) -> bool:
 
 
 async def test_multi_turn(model: OpenAICompatModel) -> bool:
-    """Test multi-turn conversation."""
+    """测试多轮对话。"""
     print("  [3] Multi-turn...", end=" ", flush=True)
     try:
         messages = [

@@ -1,4 +1,4 @@
-"""Tests for permission guard and tool registry permission integration."""
+"""权限守卫与工具注册表权限集成测试。"""
 from __future__ import annotations
 
 import asyncio
@@ -71,7 +71,7 @@ class TestRegistryWithPermissions:
 
         @reg.tool
         def write_file(path: str, content: str) -> str:
-            """Write content to a file."""
+            """向文件写入内容。"""
             return "written"
 
         guard = FSPermissionGuard(PermissionLevel.READ_ONLY)
@@ -87,7 +87,7 @@ class TestRegistryWithPermissions:
 
         @reg.tool
         def read_file(path: str) -> str:
-            """Read a file."""
+            """读取文件。"""
             return "content"
 
         guard = FSPermissionGuard(PermissionLevel.READ_ONLY)
@@ -104,7 +104,7 @@ class TestRegistryWithPermissions:
 
         @reg.tool
         def echo(text: str) -> str:
-            """Echo text."""
+            """回显文本。"""
             return text
 
         reg.add_pre_hook(lambda name, args: hook_log.append(f"pre:{name}"))

@@ -1,17 +1,17 @@
-"""Tool registry and @tool decorator.
+"""工具注册表与 `@tool` 装饰器。
 
-Usage:
+用法：
     registry = ToolRegistry()
 
     @registry.tool
     def list_files(path: str) -> str:
-        \"\"\"List files in a directory.\"\"\"
+        \"\"\"列出目录中的文件。\"\"\"
         ...
 
-    # Or use the module-level convenience:
+    # 或者使用模块级便捷接口：
     from scaffold.tools import tool
 
-    @tool(name="read_file", description="Read file contents")
+    @tool(name="read_file", description="读取文件内容")
     def read_file(path: str, offset: int = 0, length: int = -1) -> str:
         ...
 """
@@ -31,16 +31,16 @@ logger = logging.getLogger(__name__)
 
 
 class PermissionGuard(Protocol):
-    """Protocol for permission checking before tool execution.
+    """工具执行前权限检查的协议。
 
-    Return True to allow, False to block, 'confirm' to request user confirmation.
+    返回 True 表示允许，False 表示阻止，`confirm` 表示请求用户确认。
     """
     def check(self, tool_name: str, arguments: dict[str, Any]) -> bool | str: ...
     def confirm(self, tool_name: str, arguments: dict[str, Any]) -> bool: ...
 
 
 class ToolRegistry:
-    """Central store for all registered tools."""
+    """所有已注册工具的中心存储。"""
 
     def __init__(self) -> None:
         self._tools: dict[str, _RegisteredTool] = {}
@@ -49,18 +49,18 @@ class ToolRegistry:
         self._post_hooks: list[Callable[[str, dict[str, Any], str], None]] = []
 
     def set_permission_guard(self, guard: PermissionGuard) -> None:
-        """Set a permission guard that checks before every tool execution."""
+        """设置权限守卫，在每次工具执行前进行检查。"""
         self._guard = guard
 
     def add_pre_hook(self, hook: Callable[[str, dict[str, Any]], None]) -> None:
-        """Add a pre-execution hook: (tool_name, arguments) -> None."""
+        """添加执行前钩子：`(tool_name, arguments) -> None`。"""
         self._pre_hooks.append(hook)
 
     def add_post_hook(self, hook: Callable[[str, dict[str, Any], str], None]) -> None:
-        """Add a post-execution hook: (tool_name, arguments, result) -> None."""
+        """添加执行后钩子：`(tool_name, arguments, result) -> None`。"""
         self._post_hooks.append(hook)
 
-    # ---- registration ----
+    # ---- 注册 ----
 
     def register(
         self,
@@ -81,7 +81,7 @@ class ToolRegistry:
         name: str | None = None,
         description: str | None = None,
     ) -> Any:
-        """Decorator form: ``@registry.tool`` or ``@registry.tool(name=...)``."""
+        """装饰器形式：`@registry.tool` 或 `@registry.tool(name=...)`。"""
         if fn is not None:
             return self.register(fn, name=name, description=description)
 
@@ -89,7 +89,7 @@ class ToolRegistry:
             return self.register(f, name=name, description=description)
         return decorator
 
-    # ---- lookup ----
+    # ---- 查找 ----
 
     def get(self, name: str) -> _RegisteredTool | None:
         return self._tools.get(name)
@@ -98,13 +98,13 @@ class ToolRegistry:
         return list(self._tools.keys())
 
     def to_openai_tools(self) -> list[dict[str, Any]]:
-        """Return the list of tool schemas in OpenAI format."""
+        """返回 OpenAI 格式的工具 schema 列表。"""
         return [t.schema.to_openai() for t in self._tools.values()]
 
-    # ---- execution ----
+    # ---- 执行 ----
 
     async def execute(self, call: ToolCall) -> ToolResult:
-        """Execute a tool call, returning a ToolResult."""
+        """执行一次工具调用，并返回 ToolResult。"""
         registered = self._tools.get(call.name)
         if registered is None:
             return ToolResult(
@@ -118,7 +118,7 @@ class ToolRegistry:
                 is_error=True,
             )
 
-        # Permission guard
+        # 权限守卫
         if self._guard is not None:
             decision = self._guard.check(call.name, call.arguments)
             if decision is False:
@@ -138,25 +138,25 @@ class ToolRegistry:
                         is_error=True,
                     )
 
-        # Pre-hooks
+        # 执行前钩子
         for hook in self._pre_hooks:
             hook(call.name, call.arguments)
 
         result = await registered.execute(call)
 
-        # Post-hooks
+        # 执行后钩子
         for hook in self._post_hooks:
             hook(call.name, call.arguments, result.content)
 
         return result
 
     async def execute_many(self, calls: Sequence[ToolCall]) -> list[ToolResult]:
-        """Execute multiple tool calls (concurrently)."""
+        """并发执行多个工具调用。"""
         return list(await asyncio.gather(*(self.execute(c) for c in calls)))
 
 
 class _RegisteredTool:
-    """Internal wrapper around a registered tool function."""
+    """对已注册工具函数的内部包装。"""
 
     def __init__(self, fn: Callable[..., Any], schema: ToolSchema) -> None:
         self.fn = fn
@@ -199,7 +199,7 @@ class _RegisteredTool:
 
 
 # ---------------------------------------------------------------------------
-# Module-level convenience — a default global registry
+# 模块级便捷接口 —— 默认全局注册表
 # ---------------------------------------------------------------------------
 _default_registry = ToolRegistry()
 
@@ -210,5 +210,5 @@ def tool(
     name: str | None = None,
     description: str | None = None,
 ) -> Any:
-    """Module-level ``@tool`` decorator that uses the default global registry."""
+    """使用默认全局注册表的模块级 `@tool` 装饰器。"""
     return _default_registry.tool(fn, name=name, description=description)

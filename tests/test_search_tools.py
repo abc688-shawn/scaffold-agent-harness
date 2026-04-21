@@ -1,4 +1,4 @@
-"""Tests for search tools — vector store, chunking, cosine similarity."""
+"""搜索工具测试 —— 向量库、分块与余弦相似度。"""
 from __future__ import annotations
 
 import pytest
@@ -57,14 +57,14 @@ class TestChunking:
         text = "Line 1\nLine 2"
         chunks = chunk_text(text, "hashed.py")
         assert all(c.file_hash for c in chunks)
-        # Same text → same hash
+        # 相同文本应得到相同哈希
         chunks2 = chunk_text(text, "other.py")
         assert chunks[0].file_hash == chunks2[0].file_hash
 
     def test_overlap(self):
         text = "\n".join(f"L{i}" for i in range(30))
         chunks = chunk_text(text, "f.py", chunk_size=10, overlap=3)
-        # Second chunk should start before first chunk ends
+        # 第二个分块的起点应早于第一个分块的结束后一行
         assert len(chunks) >= 2
         assert chunks[1].start_line < chunks[0].end_line + 1
 
@@ -84,7 +84,7 @@ class TestVectorStore:
 
         results = store.search([1.0, 0.0, 0.0], top_k=2)
         assert len(results) == 2
-        # First result should be most similar
+        # 第一个结果应该最相似
         assert results[0][0].text == "python code"
         assert results[0][1] > results[1][1]
 

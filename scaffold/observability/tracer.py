@@ -1,4 +1,4 @@
-"""Lightweight tracing: each run is a tree of spans."""
+"""轻量级追踪：每次运行都会形成一棵 span 树。"""
 from __future__ import annotations
 
 import time
@@ -24,7 +24,7 @@ class Span:
     start_time: float = 0.0
     end_time: float = 0.0
     metadata: dict[str, Any] = field(default_factory=dict)
-    status: str = "running"  # running | completed | error
+    status: str = "running"  # running | completed | error，对应运行中 / 已完成 / 出错
 
     @property
     def latency_ms(self) -> float:
@@ -34,7 +34,7 @@ class Span:
 
 
 class Tracer:
-    """Collects spans for a single agent run."""
+    """收集单次 agent 运行中的所有 span。"""
 
     def __init__(self, run_id: str | None = None) -> None:
         self.run_id = run_id or uuid.uuid4().hex[:12]

@@ -1,4 +1,4 @@
-"""Standardized tool errors with codes and hints for the model."""
+"""带有错误码和提示信息的标准化工具错误，供模型使用。"""
 from __future__ import annotations
 
 from enum import Enum
@@ -15,7 +15,7 @@ class ToolErrorCode(str, Enum):
     UNSUPPORTED_FORMAT = "unsupported_format"
 
 
-# Hints the model can use to self-correct
+# 供模型自我修正使用的提示信息
 _DEFAULT_HINTS: dict[ToolErrorCode, str] = {
     ToolErrorCode.INVALID_ARGUMENTS: "Check the required parameters and their types.",
     ToolErrorCode.NOT_FOUND: "Verify the path exists. Use list_files first to discover available files.",
@@ -29,7 +29,7 @@ _DEFAULT_HINTS: dict[ToolErrorCode, str] = {
 
 
 class ToolError(Exception):
-    """Rich error that carries a code + hint for the model."""
+    """携带错误码和提示信息的增强错误，供模型使用。"""
 
     def __init__(
         self,
@@ -43,7 +43,7 @@ class ToolError(Exception):
         super().__init__(message)
 
     def for_model(self) -> str:
-        """Format error string intended for the LLM context."""
+        """格式化为适合放入 LLM 上下文的错误字符串。"""
         parts = [f"[{self.code.value}] {self.message}"]
         if self.hint:
             parts.append(f"Hint: {self.hint}")

@@ -1,1 +1,1 @@
-# Scaffold — Agent Harness Core
+# Scaffold —— Agent Harness 核心库

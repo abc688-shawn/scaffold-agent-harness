@@ -1,4 +1,4 @@
-"""Tests for the MockModel and base message types."""
+"""MockModel 与基础消息类型测试。"""
 import asyncio
 import pytest
 

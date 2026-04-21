@@ -1,13 +1,13 @@
-"""Streamlit-based trace viewer.
+"""基于 Streamlit 的追踪查看器。
 
-Launch:
+启动方式：
     streamlit run scaffold/observability/ui.py -- --db traces.db
 
-Shows:
-- Run list with summary stats
-- Span timeline / waterfall per run
-- Token flow breakdown (which step consumed the most tokens)
-- Error & failure highlighting
+展示内容：
+- 带摘要统计的运行列表
+- 每次运行的 span 时间线 / 瀑布图
+- token 流向拆解（哪一步消耗最多）
+- 错误与失败高亮
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ except ImportError:
 from scaffold.observability.storage import TraceStorage
 
 # ---------------------------------------------------------------------------
-# Page config
+# 页面配置
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title="Scaffold Trace Viewer", page_icon="🔍", layout="wide")
 
@@ -46,7 +46,7 @@ def _fmt_latency(ms: float) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Sidebar — DB picker & run list
+# 侧边栏 —— 数据库选择与运行列表
 # ---------------------------------------------------------------------------
 st.sidebar.title("🔍 Scaffold Trace Viewer")
 
@@ -72,7 +72,7 @@ selected_label = st.sidebar.selectbox("Select a run", list(run_options.keys()))
 selected_run_id = run_options[selected_label]
 
 # ---------------------------------------------------------------------------
-# Main: Run overview
+# 主区域：运行概览
 # ---------------------------------------------------------------------------
 run_meta = next(r for r in runs if r["run_id"] == selected_run_id)
 spans = storage.get_spans(selected_run_id)
@@ -100,7 +100,7 @@ if "user_input" in meta:
     st.markdown(f"**User Input:** {meta['user_input']}")
 
 # ---------------------------------------------------------------------------
-# Span timeline (waterfall)
+# Span 时间线（瀑布图）
 # ---------------------------------------------------------------------------
 st.subheader("Span Timeline")
 
@@ -114,12 +114,12 @@ if spans:
         offset = (s["start_time"] - min_start) * 1000 if s["start_time"] else 0
         latency = s.get("latency_ms", 0)
 
-        # Color by kind
+        # 按类型设置颜色
         kind = s["kind"]
         color_map = {"agent": "🟢", "llm": "🔵", "tool": "🟠", "other": "⚪"}
         icon = color_map.get(kind, "⚪")
 
-        # Indent child spans
+        # 子 span 缩进显示
         indent = "  └─ " if s.get("parent_id") else ""
 
         status_icon = "✅" if s["status"] == "completed" else "❌"
@@ -133,7 +133,7 @@ if spans:
         )
 
 # ---------------------------------------------------------------------------
-# Token flow
+# Token 流向
 # ---------------------------------------------------------------------------
 st.subheader("Token Flow by Step")
 
@@ -157,13 +157,13 @@ if llm_spans:
         },
     )
 
-    # Table view
+    # 表格视图
     st.dataframe(chart_data, use_container_width=True)
 else:
     st.info("No LLM spans in this run.")
 
 # ---------------------------------------------------------------------------
-# Tool calls detail
+# 工具调用详情
 # ---------------------------------------------------------------------------
 st.subheader("Tool Calls")
 
@@ -184,7 +184,7 @@ else:
     st.info("No tool calls in this run.")
 
 # ---------------------------------------------------------------------------
-# Raw span data
+# 原始 span 数据
 # ---------------------------------------------------------------------------
 with st.expander("Raw Span Data"):
     st.json(spans)

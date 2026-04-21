@@ -1,7 +1,7 @@
-"""Core file-system tools for the fs-agent.
+"""fs-agent 的核心文件系统工具。
 
-Each tool is registered via the @tool decorator and produces an OpenAI
-function-call schema automatically.
+每个工具都通过 `@tool` 装饰器注册，并自动生成 OpenAI
+function-call schema。
 """
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from scaffold.tools.registry import ToolRegistry
 from scaffold.tools.errors import ToolError, ToolErrorCode
 from scaffold.safety.sandbox import PathSandbox
 
-# The fs-agent has its own dedicated registry
+# fs-agent 使用独立的工具注册表
 registry = ToolRegistry()
 
-# Sandbox will be configured at startup
+# 沙箱会在启动时完成配置
 _sandbox: PathSandbox | None = None
 
 
@@ -31,16 +31,16 @@ def _check_sandbox(path: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Tool: list_files
+# 工具：list_files
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def list_files(path: str = ".", recursive: bool = False, pattern: str = "*") -> str:
-    """List files in a directory. Use this to discover what files are available.
+    """列出目录中的文件，用于发现有哪些可用文件。
 
-    path: Directory path to list. Defaults to current workspace root.
-    recursive: If true, list files recursively in subdirectories.
-    pattern: Glob pattern to filter files (e.g. '*.py', '*.pdf').
+    path: 要列出的目录路径。默认是当前工作区根目录。
+    recursive: 为 true 时递归列出子目录中的文件。
+    pattern: 用于筛选文件的 glob 模式（例如 `*.py`、`*.pdf`）。
     """
     resolved = _check_sandbox(path)
     if not resolved.is_dir():
@@ -51,7 +51,7 @@ def list_files(path: str = ".", recursive: bool = False, pattern: str = "*") -> 
     else:
         files = list(resolved.glob(pattern))
 
-    # Limit output to avoid context explosion
+    # 限制输出规模，避免上下文膨胀
     max_items = 200
     entries = []
     for f in sorted(files)[:max_items]:
@@ -74,25 +74,25 @@ def list_files(path: str = ".", recursive: bool = False, pattern: str = "*") -> 
 
 
 # ---------------------------------------------------------------------------
-# Tool: read_file
+# 工具：read_file
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def read_file(path: str, offset: int = 0, length: int = 10000) -> str:
-    """Read the text content of a file. Use when you need to see file contents.
+    """读取文件的文本内容，适合需要查看文件正文时使用。
 
-    Prefer search_files when looking for specific content across many files.
+    如果是跨多个文件查找特定内容，优先使用 `search_files`。
 
-    path: Path to the file to read.
-    offset: Character offset to start reading from (for large files).
-    length: Maximum number of characters to read. Use -1 for entire file (caution: large files).
+    path: 要读取的文件路径。
+    offset: 起始字符偏移量（适合大文件分段读取）。
+    length: 最多读取的字符数。设为 -1 表示读取全部内容（大文件需谨慎）。
     """
     resolved = _check_sandbox(path)
     if not resolved.is_file():
         raise ToolError(ToolErrorCode.NOT_FOUND, f"'{path}' is not a file.")
 
     size = resolved.stat().st_size
-    if size > 10_000_000:  # 10 MB
+    if size > 10_000_000:  # 10 MB 上限
         raise ToolError(
             ToolErrorCode.FILE_TOO_LARGE,
             f"File is {size:,} bytes. Use offset/length to read in chunks.",
@@ -115,20 +115,20 @@ def read_file(path: str, offset: int = 0, length: int = 10000) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool: search_files
+# 工具：search_files
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def search_files(query: str, path: str = ".", pattern: str = "*",
                  max_results: int = 20) -> str:
-    """Search for files containing a text query. Use when looking for specific content.
+    """搜索包含指定文本查询的文件，适合定位特定内容。
 
-    Prefer this over read_file when you don't know which file has the information.
+    当你不知道信息位于哪个文件时，优先使用它而不是 `read_file`。
 
-    query: Text to search for (case-insensitive substring match).
-    path: Directory to search in.
-    pattern: Glob pattern for file types (e.g. '*.py').
-    max_results: Maximum number of matching files to return.
+    query: 要搜索的文本（大小写不敏感的子串匹配）。
+    path: 要搜索的目录。
+    pattern: 文件类型的 glob 模式（例如 `*.py`）。
+    max_results: 最多返回多少个匹配文件。
     """
     resolved = _check_sandbox(path)
     if not resolved.is_dir():
@@ -144,7 +144,7 @@ def search_files(query: str, path: str = ".", pattern: str = "*",
         except (OSError, UnicodeDecodeError):
             continue
         if query_lower in text.lower():
-            # Find first matching line
+            # 找到第一行匹配内容
             for i, line in enumerate(text.splitlines(), 1):
                 if query_lower in line.lower():
                     snippet = line.strip()[:120]
@@ -160,14 +160,14 @@ def search_files(query: str, path: str = ".", pattern: str = "*",
 
 
 # ---------------------------------------------------------------------------
-# Tool: file_info
+# 工具：file_info
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def file_info(path: str) -> str:
-    """Get detailed metadata about a file (size, dates, type).
+    """获取文件的详细元数据（大小、日期、类型等）。
 
-    path: Path to the file.
+    path: 文件路径。
     """
     resolved = _check_sandbox(path)
     if not resolved.exists():
@@ -188,16 +188,16 @@ def file_info(path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool: write_file
+# 工具：write_file
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def write_file(path: str, content: str, mode: str = "overwrite") -> str:
-    """Write content to a file. Requires confirmation for destructive operations.
+    """将内容写入文件。破坏性操作应先经过确认。
 
-    path: Path to the file to write.
-    content: The text content to write.
-    mode: 'overwrite' to replace, 'append' to add to end.
+    path: 要写入的文件路径。
+    content: 要写入的文本内容。
+    mode: `overwrite` 表示覆盖，`append` 表示追加到末尾。
     """
     resolved = _check_sandbox(path)
 
@@ -212,15 +212,15 @@ def write_file(path: str, content: str, mode: str = "overwrite") -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool: move_file
+# 工具：move_file
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def move_file(source: str, destination: str) -> str:
-    """Move or rename a file.
+    """移动或重命名文件。
 
-    source: Current path of the file.
-    destination: New path for the file.
+    source: 文件当前路径。
+    destination: 文件新的路径。
     """
     src = _check_sandbox(source)
     dst = _check_sandbox(destination)
@@ -232,14 +232,14 @@ def move_file(source: str, destination: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool: delete_file
+# 工具：delete_file
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def delete_file(path: str) -> str:
-    """Delete a file. This is a destructive operation.
+    """删除文件。这是破坏性操作。
 
-    path: Path to the file to delete.
+    path: 要删除的文件路径。
     """
     resolved = _check_sandbox(path)
     if not resolved.is_file():
@@ -249,12 +249,12 @@ def delete_file(path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 def _human_size(size: int) -> str:
     for unit in ("B", "KB", "MB", "GB"):
         if size < 1024:
             return f"{size:.1f} {unit}"
-        size /= 1024  # type: ignore
+        size /= 1024  # type: ignore  # 这里接受浮点递减
     return f"{size:.1f} TB"

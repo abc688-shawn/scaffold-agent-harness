@@ -1,4 +1,4 @@
-"""Simple in-memory + optional disk cache for tool results and LLM responses."""
+"""用于工具结果和 LLM 响应的简单内存缓存，可选扩展到磁盘。"""
 from __future__ import annotations
 
 import hashlib
@@ -13,7 +13,7 @@ class CacheEntry:
     key: str
     value: Any
     created_at: float = field(default_factory=time.time)
-    ttl: float = 0  # 0 = no expiration
+    ttl: float = 0  # 0 表示永不过期
 
     @property
     def expired(self) -> bool:
@@ -23,11 +23,11 @@ class CacheEntry:
 
 
 class ResultCache:
-    """In-memory cache keyed by tool name + arguments hash.
+    """基于工具名和参数哈希的内存缓存。
 
-    Use for:
-    - Tool result caching (same args → skip re-execution)
-    - LLM response caching (same prompt → skip API call, great for eval)
+    可用于：
+    - 工具结果缓存（相同参数时跳过重复执行）
+    - LLM 响应缓存（相同提示词时跳过 API 调用，特别适合评估）
     """
 
     def __init__(self, default_ttl: float = 300.0) -> None:

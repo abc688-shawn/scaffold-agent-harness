@@ -1,4 +1,4 @@
-"""Tests for dynamic system prompts and phase-aware context."""
+"""动态 system prompt 与阶段感知上下文测试。"""
 from __future__ import annotations
 
 import pytest
@@ -19,12 +19,12 @@ class TestDynamicPrompt:
         dp.set_phase_prompt(AgentPhase.EXECUTION, "Execute the plan.")
         dp.set_phase_prompt(AgentPhase.REFLECTION, "Reflect on what happened.")
 
-        # Default phase is EXECUTION
+        # 默认阶段应为 EXECUTION
         assert dp.phase == AgentPhase.EXECUTION
         rendered = dp.render()
         assert "Base prompt." in rendered
         assert "Execute the plan." in rendered
-        assert "planning" not in rendered.lower().split("execution")[0]  # planning text not present
+        assert "planning" not in rendered.lower().split("execution")[0]  # 不应出现 planning 文本
 
     def test_phase_switching(self):
         dp = DynamicPrompt("Base.")
@@ -40,7 +40,7 @@ class TestDynamicPrompt:
         assert "Plan section." not in dp.render()
 
     def test_kv_cache_friendly_layout(self):
-        """Base prompt should always be the prefix (for KV-cache)."""
+        """基础提示词应始终位于前缀位置（便于 KV-cache 命中）。"""
         dp = DynamicPrompt("STABLE_PREFIX_CONTENT")
         dp.set_phase_prompt(AgentPhase.PLANNING, "dynamic planning content")
 
@@ -49,7 +49,7 @@ class TestDynamicPrompt:
         assert rendered.startswith("STABLE_PREFIX_CONTENT")
 
     def test_no_phase_section(self):
-        """Phase without registered section falls back to base only."""
+        """未注册附加段落的阶段应退回到仅使用基础提示词。"""
         dp = DynamicPrompt("Base only.")
         dp.phase = AgentPhase.REFLECTION
         assert dp.render() == "Base only."
@@ -74,7 +74,7 @@ class TestContextWindowWithDynamicPrompt:
 
         cw.prompt.phase = AgentPhase.PLANNING
         prompt = cw.build_prompt()
-        # System message should contain planning content
+        # System 消息中应包含 planning 内容
         system_msg = prompt[0]
         assert "Planning" in system_msg.content
 
@@ -84,5 +84,5 @@ class TestContextWindowWithDynamicPrompt:
         cw.add(Message.assistant("Hi there"))
 
         prompt = cw.build_prompt()
-        assert len(prompt) >= 3  # system + user + assistant
+        assert len(prompt) >= 3  # system + user + assistant 三条消息
         assert prompt[0].content == "System"

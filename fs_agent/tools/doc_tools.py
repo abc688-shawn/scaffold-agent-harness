@@ -1,7 +1,7 @@
-"""Document processing tools — PDF, DOCX, and rich file preview.
+"""文档处理工具 —— PDF、DOCX 与富预览能力。
 
-Extends the base file tools with format-specific readers.
-Uses optional deps: pymupdf (PDF), python-docx (DOCX), chardet (encoding detection).
+在基础文件工具之上补充了特定格式的读取器。
+可选依赖包括：pymupdf（PDF）、python-docx（DOCX）、chardet（编码检测）。
 """
 from __future__ import annotations
 
@@ -14,18 +14,18 @@ from fs_agent.tools.file_tools import registry, _check_sandbox
 
 
 # ---------------------------------------------------------------------------
-# Tool: read_pdf
+# 工具：read_pdf
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def read_pdf(path: str, pages: str = "all", max_pages: int = 50) -> str:
-    """Read text content from a PDF file. Use when the file has a .pdf extension.
+    """读取 PDF 文件中的文本内容，适用于 `.pdf` 文件。
 
-    Prefer this over read_file for PDF files, as read_file returns raw bytes.
+    对 PDF 应优先使用它而不是 `read_file`，因为 `read_file` 返回的是原始字节。
 
-    path: Path to the PDF file.
-    pages: Which pages to read. 'all' for all pages, or '1-5' for a range, or '1,3,5' for specific pages.
-    max_pages: Maximum number of pages to extract (safety limit).
+    path: PDF 文件路径。
+    pages: 要读取的页码。`all` 表示全部，`1-5` 表示范围，`1,3,5` 表示指定页。
+    max_pages: 最多提取的页数（安全限制）。
     """
     resolved = _check_sandbox(path)
     if not resolved.is_file():
@@ -34,7 +34,7 @@ def read_pdf(path: str, pages: str = "all", max_pages: int = 50) -> str:
         raise ToolError(ToolErrorCode.UNSUPPORTED_FORMAT, f"'{path}' is not a PDF file.")
 
     try:
-        import fitz  # pymupdf
+        import fitz  # pymupdf 库
     except ImportError:
         raise ToolError(
             ToolErrorCode.INTERNAL,
@@ -67,15 +67,15 @@ def read_pdf(path: str, pages: str = "all", max_pages: int = 50) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool: read_docx
+# 工具：read_docx
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def read_docx(path: str, max_paragraphs: int = 500) -> str:
-    """Read text content from a Word document (.docx). Use when the file has a .docx extension.
+    """读取 Word 文档（`.docx`）中的文本内容，适用于 `.docx` 文件。
 
-    path: Path to the Word document.
-    max_paragraphs: Maximum number of paragraphs to extract.
+    path: Word 文档路径。
+    max_paragraphs: 最多提取的段落数。
     """
     resolved = _check_sandbox(path)
     if not resolved.is_file():
@@ -102,7 +102,7 @@ def read_docx(path: str, max_paragraphs: int = 500) -> str:
             break
         text = para.text.strip()
         if text:
-            # Preserve heading structure
+            # 保留标题结构
             if para.style and para.style.name.startswith("Heading"):
                 level = para.style.name.replace("Heading ", "")
                 try:
@@ -113,7 +113,7 @@ def read_docx(path: str, max_paragraphs: int = 500) -> str:
             else:
                 paragraphs.append(text)
 
-    # Also extract tables
+    # 同时提取表格内容
     tables_text = []
     for t_idx, table in enumerate(doc.tables):
         rows = []
@@ -131,17 +131,17 @@ def read_docx(path: str, max_paragraphs: int = 500) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool: preview_file
+# 工具：preview_file
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def preview_file(path: str) -> str:
-    """Get a smart preview of any file. Auto-detects format and extracts key content.
+    """获取任意文件的智能预览，自动检测格式并提取关键信息。
 
-    Use this for a quick look at a file when you don't know its format.
-    Supports: text, PDF, DOCX, code, CSV, JSON, YAML.
+    当你不了解文件格式，只想快速看一眼时可以使用它。
+    支持：文本、PDF、DOCX、代码、CSV、JSON、YAML。
 
-    path: Path to the file to preview.
+    path: 需要预览的文件路径。
     """
     resolved = _check_sandbox(path)
     if not resolved.is_file():
@@ -150,7 +150,7 @@ def preview_file(path: str) -> str:
     size = resolved.stat().st_size
     suffix = resolved.suffix.lower()
 
-    # Route to specialized readers
+    # 分发到对应的专用读取器
     if suffix == ".pdf":
         return read_pdf(path, pages="1-3", max_pages=3)
     elif suffix == ".docx":
@@ -164,17 +164,17 @@ def preview_file(path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool: summarize_file
+# 工具：summarize_file
 # ---------------------------------------------------------------------------
 
 @registry.tool
 def summarize_file(path: str) -> str:
-    """Extract key structural information about a file for quick understanding.
+    """提取文件的关键结构信息，帮助快速理解内容。
 
-    Returns: file type, size, structure (headings for docs, function names for code, etc.)
-    Does NOT read the full content — use read_file or read_pdf for that.
+    返回内容包括：文件类型、大小、结构信息（例如文档标题、代码函数名等）。
+    它不会读取完整内容；若需全文，请使用 `read_file` 或 `read_pdf`。
 
-    path: Path to the file.
+    path: 文件路径。
     """
     resolved = _check_sandbox(path)
     if not resolved.is_file():
@@ -227,11 +227,11 @@ def summarize_file(path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
+# 内部辅助函数
 # ---------------------------------------------------------------------------
 
 def _parse_page_range(spec: str, total: int) -> list[int]:
-    """Parse page specification into 0-based indices."""
+    """将页码规格解析为从 0 开始的索引列表。"""
     if spec.strip().lower() == "all":
         return list(range(total))
     indices = []
@@ -266,7 +266,7 @@ def _preview_csv(path: Path, suffix: str) -> str:
 
 def _preview_structured(path: Path) -> str:
     text = path.read_text(encoding="utf-8", errors="replace")
-    # Truncate to 3000 chars for preview
+    # 预览最多截断到 3000 个字符
     if len(text) > 3000:
         return f"[{path.suffix.upper()}: {path.name} | {len(text):,} chars]\n{text[:3000]}\n... (truncated)"
     return f"[{path.suffix.upper()}: {path.name} | {len(text):,} chars]\n{text}"
@@ -274,7 +274,7 @@ def _preview_structured(path: Path) -> str:
 
 def _preview_text(path: Path, size: int) -> str:
     try:
-        # Detect encoding
+        # 检测编码
         try:
             import chardet
             raw = path.read_bytes()[:10000]
@@ -294,7 +294,7 @@ def _preview_text(path: Path, size: int) -> str:
 
 
 def _summarize_code(path: Path) -> list[str]:
-    """Extract function/class names from source code."""
+    """从源代码中提取函数名和类名。"""
     info: list[str] = []
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -342,5 +342,5 @@ def _human_size(size: int) -> str:
     for unit in ("B", "KB", "MB", "GB"):
         if size < 1024:
             return f"{size:.1f} {unit}"
-        size /= 1024  # type: ignore
+        size /= 1024  # type: ignore  # 这里接受浮点递减
     return f"{size:.1f} TB"

@@ -1,6 +1,6 @@
-"""fs-agent CLI — interactive file assistant.
+"""fs-agent CLI —— 交互式文件助手。
 
-Usage:
+用法：
     fs-agent --workspace ~/Documents --model deepseek-reasoner
     fs-agent --workspace . --api-base https://open.bigmodel.cn/api/paas/v4/ --model glm-5
 """
@@ -30,11 +30,11 @@ from scaffold.safety.injection import INJECTION_DEFENSE_PROMPT
 from fs_agent.tools.file_tools import registry as file_registry, set_sandbox
 from fs_agent.policies.permissions import PermissionLevel, FSPermissionGuard
 
-# Import tool modules so they register onto file_registry
-import fs_agent.tools.doc_tools        # noqa: F401
-import fs_agent.tools.advanced_tools   # noqa: F401
+# 导入工具模块，使它们自动注册到 file_registry 上
+import fs_agent.tools.doc_tools        # noqa: F401 — 导入即完成工具注册
+import fs_agent.tools.advanced_tools   # noqa: F401 — 导入即完成工具注册
 try:
-    import fs_agent.tools.search_tools  # noqa: F401 — registers semantic search tools if deps available
+    import fs_agent.tools.search_tools  # noqa: F401 — 如果依赖可用，则注册语义搜索工具
 except ImportError:
     pass
 
@@ -72,11 +72,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 async def run_interactive(args: argparse.Namespace) -> None:
-    # --- Setup ---
+    # --- 初始化 ---
     sandbox = PathSandbox([args.workspace])
     set_sandbox(sandbox)
 
-    # Permission guard
+    # 权限守卫
     level = PermissionLevel(args.permission)
     guard = FSPermissionGuard(level)
     file_registry.set_permission_guard(guard)
@@ -91,7 +91,7 @@ async def run_interactive(args: argparse.Namespace) -> None:
         model=args.model,
     )
 
-    # Optional: configure semantic search
+    # 可选：配置语义搜索
     try:
         from fs_agent.tools.search_tools import configure_search, EmbeddingClient
         if args.embed_model:
@@ -144,7 +144,7 @@ async def run_interactive(args: argparse.Namespace) -> None:
         print(result.final_message or "(no response)")
         print()
 
-        # Save trace
+        # 保存追踪信息
         trace_storage.save_trace(tracer, metadata={
             "user_input": user_input,
             "steps": result.steps,

@@ -1,9 +1,9 @@
-"""Message compression strategies.
+"""消息压缩策略。
 
-Three strategies implemented:
-1. NaiveSummary — old messages → one summary message
-2. SummaryWithRefs — summary + reference IDs; tool results stored for retrieval
-3. SlidingWindow — keep last N turns verbatim, drop the rest
+当前实现了三种策略：
+1. NaiveSummary —— 将旧消息压缩成一条摘要
+2. SummaryWithRefs —— 摘要加引用 ID；工具结果单独存储以便检索
+3. SlidingWindow —— 原样保留最近 N 轮，其余丢弃
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class CompressionStrategy(str, Enum):
 
 @dataclass
 class ReferenceStore:
-    """Stores tool results by reference ID for later retrieval."""
+    """按引用 ID 存储工具结果，供后续检索。"""
     _store: dict[str, str] = field(default_factory=dict)
 
     def store(self, content: str) -> str:
@@ -43,16 +43,16 @@ def compress_messages(
     keep_last_n: int = 6,
     ref_store: ReferenceStore | None = None,
 ) -> list[Message]:
-    """Compress message history according to the chosen strategy.
+    """按选定策略压缩消息历史。
 
-    Args:
-        messages: Full message history (excluding system prompt).
-        strategy: Which compression algorithm to use.
-        keep_last_n: Number of recent messages to keep verbatim.
-        ref_store: Reference store for summary_with_refs strategy.
+    参数：
+        messages: 完整消息历史（不包含 system prompt）。
+        strategy: 使用哪种压缩算法。
+        keep_last_n: 需要原样保留的最近消息数。
+        ref_store: `summary_with_refs` 策略使用的引用存储。
 
-    Returns:
-        Compressed message list.
+    返回：
+        压缩后的消息列表。
     """
     if len(messages) <= keep_last_n:
         return messages
@@ -66,7 +66,7 @@ def compress_messages(
 
 
 def _sliding_window(messages: list[Message], keep_last_n: int) -> list[Message]:
-    """Keep only the last N messages."""
+    """仅保留最近 N 条消息。"""
     dropped = len(messages) - keep_last_n
     summary = Message.system(
         f"[Context note: {dropped} earlier messages were truncated to save context space. "
@@ -80,11 +80,11 @@ def _summary_with_refs(
     keep_last_n: int,
     ref_store: ReferenceStore,
 ) -> list[Message]:
-    """Summarize old messages and store tool results as references."""
+    """概括旧消息，并将工具结果存为引用。"""
     old = messages[:-keep_last_n]
     recent = messages[-keep_last_n:]
 
-    # Build summary of old messages
+    # 构造旧消息的摘要
     summary_parts: list[str] = []
     for m in old:
         if m.role == Role.TOOL and m.content:
@@ -94,7 +94,7 @@ def _summary_with_refs(
             names = [tc.name for tc in m.tool_calls]
             summary_parts.append(f"- Assistant called tools: {', '.join(names)}")
         elif m.role == Role.USER and m.content:
-            # Truncate long user messages
+            # 截断过长的用户消息
             snippet = m.content[:100] + "..." if len(m.content) > 100 else m.content
             summary_parts.append(f"- User: {snippet}")
         elif m.role == Role.ASSISTANT and m.content:

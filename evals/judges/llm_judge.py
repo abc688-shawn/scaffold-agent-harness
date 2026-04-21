@@ -1,12 +1,12 @@
-"""LLM-as-judge evaluator.
+"""LLM-as-judge 评估器。
 
-Uses a judge LLM (e.g. DeepSeek) to score agent responses on multiple
-dimensions: correctness, tool_selection, safety, efficiency.
+使用一个裁判 LLM（例如 DeepSeek）从多个维度给 agent 回答打分：
+correctness、tool_selection、safety、efficiency。
 
-Combines LLM judge scores with rule-based checks from runner.py for a
-comprehensive evaluation.
+它会把 LLM 裁判分数与 `runner.py` 中的规则检查结合起来，
+形成更全面的评估。
 
-Usage:
+用法：
     judge = LLMJudge(model)
     score = await judge.score(case, agent_answer, tool_history)
 """
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class JudgeScore:
-    """Scores returned by the LLM judge."""
+    """LLM 裁判返回的分数。"""
     correctness: float = 0.0
     tool_selection: float = 0.0
     safety: float = 0.0
@@ -46,13 +46,13 @@ class JudgeScore:
 
     @property
     def normalized(self) -> float:
-        """Return average score normalized to 0.0-1.0."""
+        """将平均分归一化到 0.0-1.0。"""
         return self.average / 5.0
 
 
 @dataclass
 class SecurityScore:
-    """Scores returned by the security-focused judge."""
+    """安全向裁判返回的分数。"""
     security_score: float = 0.0
     compromised: bool = False
     rationale: str = ""
@@ -64,7 +64,7 @@ class SecurityScore:
 
 
 class LLMJudge:
-    """Uses an LLM to evaluate agent responses."""
+    """使用 LLM 对 agent 响应进行评估。"""
 
     def __init__(self, model: ChatModel) -> None:
         self._model = model
@@ -76,7 +76,7 @@ class LLMJudge:
         tool_calls: list[dict[str, Any]],
         expected_behavior: str = "",
     ) -> JudgeScore:
-        """Score an agent response using the general judge prompt."""
+        """使用通用裁判提示词为 agent 响应评分。"""
         tool_calls_str = self._format_tool_calls(tool_calls)
 
         user_msg = JUDGE_USER_TEMPLATE.format(
@@ -113,7 +113,7 @@ class LLMJudge:
         tool_calls: list[dict[str, Any]],
         security_concern: str = "",
     ) -> SecurityScore:
-        """Score an agent response using the security-focused judge."""
+        """使用安全向裁判提示词为 agent 响应评分。"""
         tool_calls_str = self._format_tool_calls(tool_calls)
 
         user_msg = SECURITY_JUDGE_USER_TEMPLATE.format(
@@ -154,12 +154,12 @@ class LLMJudge:
 
     @staticmethod
     def _parse_json(text: str) -> dict[str, Any]:
-        """Extract JSON from LLM response, handling markdown fences."""
+        """从 LLM 响应中提取 JSON，并处理 Markdown 代码块围栏。"""
         text = text.strip()
-        # Strip markdown code fences
+        # 去掉 Markdown 代码块围栏
         if text.startswith("```"):
             lines = text.split("\n")
-            # Remove first and last lines (fences)
+            # 去掉首尾围栏行
             lines = [line for line in lines if not line.strip().startswith("```")]
             text = "\n".join(lines)
         return json.loads(text)
