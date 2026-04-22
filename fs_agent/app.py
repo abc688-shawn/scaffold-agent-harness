@@ -153,51 +153,19 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 
 @st.cache_resource(hash_funcs={"builtins.str": lambda s: s})
-def _build_agent_components(api_key: str, api_base: str, model: str,
-                             workspace: str, permission_level: str, max_steps: int):
-    """构建并返回 agent 组件；在配置变化前都会复用缓存。"""
-    from scaffold.cache.cache import ResultCache
-    from scaffold.context.budget import TokenBudget
-    from scaffold.loop.react import LoopConfig
-    from scaffold.models.openai_compat import OpenAICompatModel
-    from scaffold.prompts.loader import build_dynamic_prompt
-    from scaffold.safety.injection import INJECTION_DEFENSE_PROMPT
-    from scaffold.safety.sandbox import PathSandbox
-    from fs_agent.tools.file_tools import registry, set_sandbox
-    from fs_agent.policies.permissions import PermissionLevel, FSPermissionGuard
-    import fs_agent.tools.doc_tools       # noqa: F401 — 导入即完成工具注册
-    import fs_agent.tools.advanced_tools  # noqa: F401 — 导入即完成工具注册
-    try:
-        import fs_agent.tools.search_tools  # noqa: F401 — 若依赖存在则注册搜索工具
-    except ImportError:
-        pass
-
-    sandbox = PathSandbox([workspace])
-    set_sandbox(sandbox)
-
-    level = PermissionLevel(permission_level)
-    guard = FSPermissionGuard(level)
-    registry.set_permission_guard(guard)
-
-    result_cache = ResultCache(default_ttl=300.0)
-    registry.set_cache(result_cache)
-
-    model_client = OpenAICompatModel(
-        api_key=api_key,
-        base_url=api_base or None,
-        model=model,
-    )
-
-    dynamic_prompt = build_dynamic_prompt(
-        "system/fs_agent.j2",
+def _build_agent(api_key: str, api_base: str, model: str,
+                 workspace: str, permission_level: str, max_steps: int):
+    """构建并返回 FSAgent；在配置变化前都会复用缓存。"""
+    from fs_agent.agent import FSAgent, FSAgentConfig
+    config = FSAgentConfig(
         workspace=workspace,
-        injection_defense=INJECTION_DEFENSE_PROMPT,
+        api_key=api_key,
+        api_base=api_base,
+        model=model,
+        max_steps=max_steps,
+        permission=permission_level,
     )
-
-    budget = TokenBudget(max_context_tokens=128_000)
-    loop_config = LoopConfig(max_steps=max_steps)
-
-    return model_client, registry, dynamic_prompt, budget, loop_config, result_cache
+    return FSAgent(config)
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +205,7 @@ if user_input:
         answer_placeholder = st.empty()
 
         try:
-            model_client, registry, dynamic_prompt, budget, loop_config, result_cache = _build_agent_components(
+            agent = _build_agent(
                 api_key=api_key,
                 api_base=api_base,
                 model=model_name,
@@ -246,40 +214,20 @@ if user_input:
                 max_steps=max_steps,
             )
 
-            from scaffold.context.window import ContextWindow
-            from scaffold.loop.middlewares import CostTrackerMiddleware, RedactionMiddleware, ToolCallLimitMiddleware
-            from scaffold.loop.react import ReActLoop
+            from scaffold.models.base import Message
             from scaffold.observability.storage import TraceStorage
             from scaffold.observability.tracer import Tracer
 
-            # 每轮重建上下文（每个问题使用新的上下文，多轮效果通过历史消息注入实现）
-            context = ContextWindow(system_prompt=dynamic_prompt, budget=budget)
-
-            middlewares = [
-                ToolCallLimitMiddleware(repeat_limit=3),
-                RedactionMiddleware(),
-                CostTrackerMiddleware(warn_fraction=0.8, result_cache=result_cache),
-            ]
-
-            # 将既有对话注入为上下文
-            from scaffold.models.base import Message
+            # 每轮新建上下文，注入既有对话历史
+            context = agent.new_context()
             for prev in st.session_state.messages[:-1]:  # 排除当前这条用户消息
                 if prev["role"] == "user":
                     context.add(Message.user(prev["content"]))
                 elif prev["role"] == "assistant":
                     context.add(Message.assistant(prev["content"]))
 
-            tracer = Tracer()
-            loop = ReActLoop(
-                model=model_client,
-                tools=registry,
-                context=context,
-                config=loop_config,
-                tracer=tracer,
-                middlewares=middlewares,
-            )
-
             # 在状态框中实时显示工具调用进度
+            from fs_agent.tools.file_tools import registry
             _original_execute = registry.execute
 
             async def _traced_execute(call):
@@ -290,7 +238,8 @@ if user_input:
 
             registry.execute = _traced_execute
 
-            result = asyncio.run(loop.run(user_input))
+            tracer = Tracer()
+            result = asyncio.run(agent.run(user_input, context=context, tracer=tracer))
 
             registry.execute = _original_execute  # 恢复原始实现
 

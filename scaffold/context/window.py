@@ -43,6 +43,10 @@ class DynamicPrompt:
         """为指定阶段注册一段额外提示词。"""
         self._phase_sections[phase] = section
 
+    def get_phase_prompt(self, phase: AgentPhase) -> str:
+        """返回指定阶段的额外提示词（未设置时返回空字符串）。"""
+        return self._phase_sections.get(phase, "")
+
     @property
     def phase(self) -> AgentPhase:
         return self._current_phase

@@ -136,6 +136,7 @@ async def run_eval(
     judge_model: ChatModel | None = None,
     categories: list[str] | None = None,
     tags: list[str] | None = None,
+    max_steps: int = 15,
 ) -> list[EvalResult]:
     """运行评测 case 并返回结果。
 
@@ -169,7 +170,7 @@ async def run_eval(
         context = ContextWindow(system_prompt=system_prompt, budget=TokenBudget())
         loop = ReActLoop(
             model=model, tools=tools, context=context,
-            config=LoopConfig(max_steps=10),
+            config=LoopConfig(max_steps=max_steps),
         )
 
         start = time.monotonic()
@@ -306,6 +307,7 @@ def main() -> None:
     parser.add_argument("--judge-model", default=None, help="Judge model name (defaults to agent model)")
     parser.add_argument("--api-key", default=None, help="API key (or set DEEPSEEK_API_KEY env)")
     parser.add_argument("--base-url", default="https://api.deepseek.com/v1", help="API base URL")
+    parser.add_argument("--max-steps", type=int, default=15, help="Max agent loop steps per case")
     parser.add_argument("--dry-run", action="store_true", help="Load cases and print count, don't run")
     args = parser.parse_args()
 
@@ -344,6 +346,7 @@ def main() -> None:
         judge_model=judge_model,
         categories=args.categories,
         tags=args.tags,
+        max_steps=args.max_steps,
     ))
 
     print_summary(results)
