@@ -156,12 +156,13 @@ with st.sidebar:
 def _build_agent_components(api_key: str, api_base: str, model: str,
                              workspace: str, permission_level: str, max_steps: int):
     """构建并返回 agent 组件；在配置变化前都会复用缓存。"""
-    from scaffold.models.openai_compat import OpenAICompatModel
-    from scaffold.context.window import ContextWindow
+    from scaffold.cache.cache import ResultCache
     from scaffold.context.budget import TokenBudget
     from scaffold.loop.react import LoopConfig
-    from scaffold.safety.sandbox import PathSandbox
+    from scaffold.models.openai_compat import OpenAICompatModel
+    from scaffold.prompts.loader import build_dynamic_prompt
     from scaffold.safety.injection import INJECTION_DEFENSE_PROMPT
+    from scaffold.safety.sandbox import PathSandbox
     from fs_agent.tools.file_tools import registry, set_sandbox
     from fs_agent.policies.permissions import PermissionLevel, FSPermissionGuard
     import fs_agent.tools.doc_tools       # noqa: F401 — 导入即完成工具注册
@@ -178,32 +179,25 @@ def _build_agent_components(api_key: str, api_base: str, model: str,
     guard = FSPermissionGuard(level)
     registry.set_permission_guard(guard)
 
+    result_cache = ResultCache(default_ttl=300.0)
+    registry.set_cache(result_cache)
+
     model_client = OpenAICompatModel(
         api_key=api_key,
         base_url=api_base or None,
         model=model,
     )
 
-    system_prompt = f"""你是一个专业的文件助手，能够浏览、阅读、搜索和分析用户工作区中的文件。
-
-用户的工作区根目录是：{workspace}
-调用任何工具时，必须使用完整绝对路径，例如：
-- 列出文件：list_files(path="{workspace}")
-- 读取文件：read_file(path="{workspace}/文件名.pdf")
-- 禁止使用相对路径（如 "."、"文件名.pdf"），必须包含完整路径前缀。
-
-当用户提问时：
-1. 先理解用户需要什么
-2. 使用可用工具查找信息，路径始终使用绝对路径
-3. 给出清晰、简洁的回答，并在相关时引用具体文件名
-
-{INJECTION_DEFENSE_PROMPT}
-"""
+    dynamic_prompt = build_dynamic_prompt(
+        "system/fs_agent.j2",
+        workspace=workspace,
+        injection_defense=INJECTION_DEFENSE_PROMPT,
+    )
 
     budget = TokenBudget(max_context_tokens=128_000)
     loop_config = LoopConfig(max_steps=max_steps)
 
-    return model_client, registry, system_prompt, budget, loop_config
+    return model_client, registry, dynamic_prompt, budget, loop_config, result_cache
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +237,7 @@ if user_input:
         answer_placeholder = st.empty()
 
         try:
-            model_client, registry, system_prompt, budget, loop_config = _build_agent_components(
+            model_client, registry, dynamic_prompt, budget, loop_config, result_cache = _build_agent_components(
                 api_key=api_key,
                 api_base=api_base,
                 model=model_name,
@@ -253,12 +247,19 @@ if user_input:
             )
 
             from scaffold.context.window import ContextWindow
+            from scaffold.loop.middlewares import CostTrackerMiddleware, RedactionMiddleware, ToolCallLimitMiddleware
             from scaffold.loop.react import ReActLoop
-            from scaffold.observability.tracer import Tracer
             from scaffold.observability.storage import TraceStorage
+            from scaffold.observability.tracer import Tracer
 
             # 每轮重建上下文（每个问题使用新的上下文，多轮效果通过历史消息注入实现）
-            context = ContextWindow(system_prompt=system_prompt, budget=budget)
+            context = ContextWindow(system_prompt=dynamic_prompt, budget=budget)
+
+            middlewares = [
+                ToolCallLimitMiddleware(repeat_limit=3),
+                RedactionMiddleware(),
+                CostTrackerMiddleware(warn_fraction=0.8, result_cache=result_cache),
+            ]
 
             # 将既有对话注入为上下文
             from scaffold.models.base import Message
@@ -275,6 +276,7 @@ if user_input:
                 context=context,
                 config=loop_config,
                 tracer=tracer,
+                middlewares=middlewares,
             )
 
             # 在状态框中实时显示工具调用进度

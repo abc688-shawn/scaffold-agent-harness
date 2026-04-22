@@ -133,6 +133,8 @@ async def _naive_summary(
     keep_last_n: int,
     model: Any,
 ) -> list[Message]:
+    from scaffold.prompts.loader import render
+
     old = messages[:-keep_last_n]
     recent = messages[-keep_last_n:]
 
@@ -150,16 +152,11 @@ async def _naive_summary(
             snippet = m.content[:200] + "…" if len(m.content) > 200 else m.content
             lines.append(f"工具返回：{snippet}")
 
+    system_text = render("compression/summary_naive_system.j2")
+    user_text = render("compression/summary_naive_user.j2", conversation="\n".join(lines))
+
     response = await model.chat(
-        [
-            Message.system("你是一个专业的对话摘要助手，请用简洁准确的语言总结对话内容。"),
-            Message.user(
-                "请将以下历史对话压缩成一段简短摘要（3-6 句话），"
-                "保留关键事实、用户意图和工具调用的重要结果，"
-                "供后续对话参考：\n\n"
-                + "\n".join(lines)
-            ),
-        ],
+        [Message.system(system_text), Message.user(user_text)],
         temperature=0.0,
     )
     summary_text = response.message.content or "（摘要生成失败）"

@@ -18,17 +18,20 @@ try:
 except ImportError:
     pass
 
-from scaffold.models.openai_compat import OpenAICompatModel
-from scaffold.context.window import ContextWindow
+from scaffold.cache.cache import ResultCache
 from scaffold.context.budget import TokenBudget
-from scaffold.loop.react import ReActLoop, LoopConfig
-from scaffold.observability.tracer import Tracer
+from scaffold.context.window import ContextWindow
+from scaffold.loop.middlewares import CostTrackerMiddleware, RedactionMiddleware, ToolCallLimitMiddleware
+from scaffold.loop.react import LoopConfig, ReActLoop
+from scaffold.models.openai_compat import OpenAICompatModel
 from scaffold.observability.storage import TraceStorage
-from scaffold.safety.sandbox import PathSandbox
+from scaffold.observability.tracer import Tracer
+from scaffold.prompts.loader import build_dynamic_prompt
 from scaffold.safety.injection import INJECTION_DEFENSE_PROMPT
+from scaffold.safety.sandbox import PathSandbox
 
+from fs_agent.policies.permissions import FSPermissionGuard, PermissionLevel
 from fs_agent.tools.file_tools import registry as file_registry, set_sandbox
-from fs_agent.policies.permissions import PermissionLevel, FSPermissionGuard
 
 # 导入工具模块，使它们自动注册到 file_registry 上
 import fs_agent.tools.doc_tools        # noqa: F401 — 导入即完成工具注册
@@ -37,24 +40,6 @@ try:
     import fs_agent.tools.search_tools  # noqa: F401 — 如果依赖可用，则注册语义搜索工具
 except ImportError:
     pass
-
-
-def _build_system_prompt(workspace: str) -> str:
-    return f"""你是一个专业的文件系统助手，能够浏览、阅读、搜索和管理用户工作区中的文件。
-
-用户的工作区根目录是：{workspace}
-调用任何工具时，必须使用完整绝对路径，例如：
-- 列出文件：list_files(path="{workspace}")
-- 读取文件：read_file(path="{workspace}/文件名.pdf")
-- 禁止使用相对路径（如 "."、"文件名.pdf"），必须包含完整路径前缀。
-
-当用户提问时：
-1. 先理解用户需要什么
-2. 使用可用工具查找信息，路径始终使用绝对路径
-3. 给出清晰、简洁的回答，并在相关时引用具体文件名
-
-{INJECTION_DEFENSE_PROMPT}
-"""
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -76,10 +61,13 @@ async def run_interactive(args: argparse.Namespace) -> None:
     sandbox = PathSandbox([args.workspace])
     set_sandbox(sandbox)
 
-    # 权限守卫
     level = PermissionLevel(args.permission)
     guard = FSPermissionGuard(level)
     file_registry.set_permission_guard(guard)
+
+    # 启用工具结果缓存（read-only 工具适合缓存，300 s TTL）
+    result_cache = ResultCache(default_ttl=300.0)
+    file_registry.set_cache(result_cache)
 
     if not args.api_key:
         print("Error: No API key. Set --api-key or OPENAI_API_KEY env var.", file=sys.stderr)
@@ -105,11 +93,25 @@ async def run_interactive(args: argparse.Namespace) -> None:
     except ImportError:
         pass
 
+    # 用 Jinja2 模板构建 DynamicPrompt（包含 PLANNING / REFLECTION 阶段注入）
+    dynamic_prompt = build_dynamic_prompt(
+        "system/fs_agent.j2",
+        workspace=str(sandbox.roots[0]),
+        injection_defense=INJECTION_DEFENSE_PROMPT,
+    )
+
     budget = TokenBudget(max_context_tokens=128_000)
-    context = ContextWindow(system_prompt=_build_system_prompt(str(sandbox.roots[0])), budget=budget)
+    context = ContextWindow(system_prompt=dynamic_prompt, budget=budget)
     trace_storage = TraceStorage(args.trace_db)
 
     config = LoopConfig(max_steps=args.max_steps)
+
+    # Middleware 栈：循环检测 + 敏感信息脱敏 + Token 成本追踪
+    middlewares = [
+        ToolCallLimitMiddleware(repeat_limit=3),
+        RedactionMiddleware(),
+        CostTrackerMiddleware(warn_fraction=0.8, result_cache=result_cache),
+    ]
 
     tools_count = len(file_registry.list_names())
     print(f"🗂  fs-agent ready | workspace: {sandbox.roots[0]} | model: {args.model}")
@@ -137,16 +139,15 @@ async def run_interactive(args: argparse.Namespace) -> None:
             context=context,
             config=config,
             tracer=tracer,
+            middlewares=middlewares,
         )
 
         result = await loop.run(user_input)
 
         print(f"\nAgent: {result.final_message or '(no response)'}")
-
         print(f"({result.steps} steps, {result.total_usage.total_tokens} tokens)")
         print()
 
-        # 保存追踪信息
         trace_storage.save_trace(tracer, metadata={
             "user_input": user_input,
             "steps": result.steps,

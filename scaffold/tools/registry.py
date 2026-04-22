@@ -23,6 +23,7 @@ import logging
 import time
 from typing import Any, Callable, Protocol, Sequence
 
+from scaffold.cache.cache import ResultCache
 from scaffold.models.base import ToolCall, ToolResult
 from scaffold.safety.injection import sanitize_tool_result
 from scaffold.tools.errors import ToolError, ToolErrorCode
@@ -48,6 +49,11 @@ class ToolRegistry:
         self._guard: PermissionGuard | None = None
         self._pre_hooks: list[Callable[[str, dict[str, Any]], None]] = []
         self._post_hooks: list[Callable[[str, dict[str, Any], str], None]] = []
+        self._cache: ResultCache | None = None
+
+    def set_cache(self, cache: ResultCache) -> None:
+        """启用工具结果缓存；相同参数的调用将直接返回缓存值。"""
+        self._cache = cache
 
     def set_permission_guard(self, guard: PermissionGuard) -> None:
         """设置权限守卫，在每次工具执行前进行检查。"""
@@ -143,7 +149,20 @@ class ToolRegistry:
         for hook in self._pre_hooks:
             hook(call.name, call.arguments)
 
+        # 缓存命中检查
+        cache_key: str | None = None
+        if self._cache is not None:
+            cache_key = ResultCache.make_key(call.name, **call.arguments)
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                logger.debug("Cache hit for tool '%s'", call.name)
+                return cached
+
         result = await registered.execute(call)
+
+        # 缓存写入
+        if self._cache is not None and cache_key is not None and not result.is_error:
+            self._cache.put(cache_key, result)
 
         # 执行后钩子
         for hook in self._post_hooks:
