@@ -10,7 +10,7 @@ import abc
 import json
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Sequence
+from typing import Any, Sequence
 
 
 # ---------------------------------------------------------------------------
@@ -113,17 +113,3 @@ class ChatModel(abc.ABC):
     ) -> ModelResponse:
         """单轮对话的非流式补全。"""
 
-    async def chat_stream(
-        self,
-        messages: Sequence[Message],
-        tools: Sequence[dict[str, Any]] | None = None,
-        temperature: float = 0.0,
-        max_tokens: int | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[ModelResponse]:
-        """流式变体，会逐步产出增量结果。
-
-        默认实现会回退到非流式调用。
-        """
-        resp = await self.chat(messages, tools, temperature, max_tokens, **kwargs)
-        yield resp

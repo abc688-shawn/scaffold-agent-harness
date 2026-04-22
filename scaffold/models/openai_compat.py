@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, AsyncIterator, Sequence
+from typing import Any, Sequence
 
 from openai import AsyncOpenAI
 from tenacity import (
@@ -171,85 +171,3 @@ class OpenAICompatModel(ChatModel):
             raw=raw,
         )
 
-    async def chat_stream(
-        self,
-        messages: Sequence[Message],
-        tools: Sequence[dict[str, Any]] | None = None,
-        temperature: float = 0.0,
-        max_tokens: int | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[ModelResponse]:
-        api_kwargs: dict[str, Any] = {
-            "model": self._model,
-            "messages": self._to_openai_messages(messages),
-            "temperature": temperature,
-            "stream": True,
-        }
-        if max_tokens is not None:
-            api_kwargs["max_tokens"] = max_tokens
-        if tools:
-            api_kwargs["tools"] = tools
-        api_kwargs.update(kwargs)
-
-        stream = await self._client.chat.completions.create(**api_kwargs)
-
-        # 跨多个 chunk 累积工具调用
-        accumulated_tool_calls: dict[int, dict[str, Any]] = {}
-        accumulated_content = ""
-        finish_reason = None
-        prompt_tokens = 0
-        completion_tokens = 0
-
-        async for chunk in stream:
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-            finish_reason = chunk.choices[0].finish_reason or finish_reason
-
-            if delta.content:
-                accumulated_content += delta.content
-
-            # 累积流式返回的工具调用参数片段
-            if delta.tool_calls:
-                for tc_delta in delta.tool_calls:
-                    idx = tc_delta.index
-                    if idx not in accumulated_tool_calls:
-                        accumulated_tool_calls[idx] = {
-                            "id": tc_delta.id or "",
-                            "name": tc_delta.function.name if tc_delta.function and tc_delta.function.name else "",
-                            "arguments": "",
-                        }
-                    acc = accumulated_tool_calls[idx]
-                    if tc_delta.id:
-                        acc["id"] = tc_delta.id
-                    if tc_delta.function:
-                        if tc_delta.function.name:
-                            acc["name"] = tc_delta.function.name
-                        if tc_delta.function.arguments:
-                            acc["arguments"] += tc_delta.function.arguments
-
-            if chunk.usage:
-                prompt_tokens = chunk.usage.prompt_tokens
-                completion_tokens = chunk.usage.completion_tokens
-
-        # 构造最终响应
-        tool_calls = None
-        if accumulated_tool_calls:
-            tool_calls = []
-            for _idx in sorted(accumulated_tool_calls):
-                acc = accumulated_tool_calls[_idx]
-                try:
-                    args = json.loads(acc["arguments"]) if acc["arguments"] else {}
-                except json.JSONDecodeError:
-                    args = {"_raw": acc["arguments"]}
-                tool_calls.append(ToolCall(id=acc["id"], name=acc["name"], arguments=args))
-
-        msg = Message.assistant(
-            content=accumulated_content or None,
-            tool_calls=tool_calls,
-        )
-        yield ModelResponse(
-            message=msg,
-            usage=Usage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens),
-            finish_reason=finish_reason,
-        )

@@ -67,22 +67,24 @@ class TestContextWindowWithDynamicPrompt:
         cw = ContextWindow(system_prompt=dp)
         assert cw.prompt is dp
 
-    def test_set_phase_via_context(self):
+    @pytest.mark.asyncio
+    async def test_set_phase_via_context(self):
         dp = DynamicPrompt("Base")
         dp.set_phase_prompt(AgentPhase.PLANNING, "Planning")
         cw = ContextWindow(system_prompt=dp)
 
         cw.prompt.phase = AgentPhase.PLANNING
-        prompt = cw.build_prompt()
+        prompt = await cw.build_prompt()
         # System 消息中应包含 planning 内容
         system_msg = prompt[0]
         assert "Planning" in system_msg.content
 
-    def test_build_prompt_includes_history(self):
+    @pytest.mark.asyncio
+    async def test_build_prompt_includes_history(self):
         cw = ContextWindow(system_prompt="System")
         cw.add(Message.user("Hello"))
         cw.add(Message.assistant("Hi there"))
 
-        prompt = cw.build_prompt()
+        prompt = await cw.build_prompt()
         assert len(prompt) >= 3  # system + user + assistant 三条消息
         assert prompt[0].content == "System"

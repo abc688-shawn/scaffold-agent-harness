@@ -24,6 +24,7 @@ import time
 from typing import Any, Callable, Protocol, Sequence
 
 from scaffold.models.base import ToolCall, ToolResult
+from scaffold.safety.injection import sanitize_tool_result
 from scaffold.tools.errors import ToolError, ToolErrorCode
 from scaffold.tools.schema import ToolSchema, schema_from_function
 
@@ -172,19 +173,19 @@ class _RegisteredTool:
                 result = await asyncio.to_thread(self.fn, **call.arguments)
 
             elapsed = time.monotonic() - start
-            content = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
+            raw = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
             logger.info("Tool %s completed in %.2fs", call.name, elapsed)
             return ToolResult(
                 tool_call_id=call.id,
                 name=call.name,
-                content=content,
+                content=sanitize_tool_result(raw),
             )
         except ToolError as e:
             logger.warning("Tool %s raised ToolError: %s", call.name, e.message)
             return ToolResult(
                 tool_call_id=call.id,
                 name=call.name,
-                content=e.for_model(),
+                content=sanitize_tool_result(e.for_model()),
                 is_error=True,
             )
         except Exception as e:

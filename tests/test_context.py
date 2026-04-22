@@ -48,9 +48,10 @@ class TestCompression:
             msgs.append(Message.assistant(f"Answer {i}"))
         return msgs
 
-    def test_sliding_window(self):
+    @pytest.mark.asyncio
+    async def test_sliding_window(self):
         msgs = self._make_messages(10)  # 共 20 条消息
-        compressed = compress_messages(
+        compressed = await compress_messages(
             msgs, strategy=CompressionStrategy.SLIDING_WINDOW, keep_last_n=6
         )
         # 应该包含 1 条摘要 + 6 条最近消息
@@ -58,12 +59,14 @@ class TestCompression:
         assert compressed[0].role == Role.SYSTEM
         assert "truncated" in compressed[0].content.lower()
 
-    def test_no_compression_needed(self):
+    @pytest.mark.asyncio
+    async def test_no_compression_needed(self):
         msgs = self._make_messages(2)  # 共 4 条消息
-        compressed = compress_messages(msgs, keep_last_n=6)
+        compressed = await compress_messages(msgs, keep_last_n=6)
         assert len(compressed) == 4  # 保持不变
 
-    def test_summary_with_refs(self):
+    @pytest.mark.asyncio
+    async def test_summary_with_refs(self):
         store = ReferenceStore()
         msgs = [
             Message.user("Read file X"),
@@ -73,7 +76,7 @@ class TestCompression:
             Message.user("What about Y?"),
             Message.assistant("Let me check Y"),
         ]
-        compressed = compress_messages(
+        compressed = await compress_messages(
             msgs, strategy=CompressionStrategy.SUMMARY_WITH_REFS,
             keep_last_n=2, ref_store=store,
         )
@@ -82,17 +85,19 @@ class TestCompression:
 
 
 class TestContextWindow:
-    def test_build_prompt(self):
+    @pytest.mark.asyncio
+    async def test_build_prompt(self):
         ctx = ContextWindow(system_prompt="You are helpful")
         ctx.add(Message.user("Hi"))
         ctx.add(Message.assistant("Hello!"))
-        prompt = ctx.build_prompt()
+        prompt = await ctx.build_prompt()
         assert prompt[0].role == Role.SYSTEM
         assert prompt[0].content == "You are helpful"
         assert len(prompt) == 3
 
-    def test_update_system_prompt(self):
+    @pytest.mark.asyncio
+    async def test_update_system_prompt(self):
         ctx = ContextWindow(system_prompt="Phase 1")
         ctx.update_system_prompt("Phase 2")
-        prompt = ctx.build_prompt()
+        prompt = await ctx.build_prompt()
         assert prompt[0].content == "Phase 2"

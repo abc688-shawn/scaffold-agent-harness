@@ -10,7 +10,7 @@
 """
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Sequence
+from typing import Any, Sequence
 
 from scaffold.models.base import (
     ChatModel,
@@ -50,13 +50,3 @@ class MockModel(ChatModel):
         self._cursor += 1
         return resp
 
-    async def chat_stream(
-        self,
-        messages: Sequence[Message],
-        tools: Sequence[dict[str, Any]] | None = None,
-        temperature: float = 0.0,
-        max_tokens: int | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[ModelResponse]:
-        resp = await self.chat(messages, tools, temperature, max_tokens, **kwargs)
-        yield resp

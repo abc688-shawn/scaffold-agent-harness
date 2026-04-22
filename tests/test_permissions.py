@@ -96,7 +96,8 @@ class TestRegistryWithPermissions:
         call = ToolCall(id="1", name="read_file", arguments={"path": "x"})
         result = asyncio.get_event_loop().run_until_complete(reg.execute(call))
         assert not result.is_error
-        assert result.content == "content"
+        assert "content" in result.content
+        assert "<tool_result>" in result.content
 
     def test_hooks_fire(self):
         reg = ToolRegistry()

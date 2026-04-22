@@ -130,6 +130,7 @@ async def run_interactive(args: argparse.Namespace) -> None:
             break
 
         tracer = Tracer()
+
         loop = ReActLoop(
             model=model,
             tools=file_registry,
@@ -140,8 +141,9 @@ async def run_interactive(args: argparse.Namespace) -> None:
 
         result = await loop.run(user_input)
 
-        print(f"\nAgent ({result.steps} steps, {result.total_usage.total_tokens} tokens):")
-        print(result.final_message or "(no response)")
+        print(f"\nAgent: {result.final_message or '(no response)'}")
+
+        print(f"({result.steps} steps, {result.total_usage.total_tokens} tokens)")
         print()
 
         # 保存追踪信息

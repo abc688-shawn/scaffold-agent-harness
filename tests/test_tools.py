@@ -22,7 +22,7 @@ class TestSchemaGeneration:
 
         schema = schema_from_function(greet)
         assert schema.name == "greet"
-        assert "hello" in schema.description.lower()
+        assert "招呼" in schema.description
         assert "name" in schema.parameters["properties"]
         assert "name" in schema.parameters["required"]
         assert "loud" not in schema.parameters["required"]
@@ -73,7 +73,8 @@ class TestToolRegistry:
 
         call = ToolCall(id="1", name="echo", arguments={"text": "hello"})
         result = asyncio.get_event_loop().run_until_complete(reg.execute(call))
-        assert result.content == "hello"
+        assert "hello" in result.content
+        assert "<tool_result>" in result.content
         assert not result.is_error
 
     def test_unknown_tool(self):

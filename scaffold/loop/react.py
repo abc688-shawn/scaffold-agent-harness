@@ -84,11 +84,10 @@ class ReActLoop:
                     f"llm_call_step_{step}", kind=SpanKind.LLM, parent=run_span
                 )
 
-            prompt = self._context.build_prompt()
-            response = await self._model.chat(
-                messages=prompt,
-                tools=self._tools.to_openai_tools() or None,
-            )
+            prompt = await self._context.build_prompt(self._model)
+            tools_schema = self._tools.to_openai_tools() or None
+
+            response = await self._model.chat(messages=prompt, tools=tools_schema)
 
             self._total_usage.prompt_tokens += response.usage.prompt_tokens
             self._total_usage.completion_tokens += response.usage.completion_tokens

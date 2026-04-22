@@ -103,26 +103,26 @@ class ContextWindow:
     def history(self) -> list[Message]:
         return list(self._messages)
 
-    def build_prompt(self) -> list[Message]:
+    async def build_prompt(self, model=None) -> list[Message]:
         """为 LLM 组装完整提示词。
 
         布局（对 KV cache 友好）：
         1. System prompt（稳定前缀，提升前缀缓存命中率）
         2. 对话历史（必要时进行压缩）
+
+        参数 model 仅在策略为 NAIVE_SUMMARY 时使用；其他策略可省略。
         """
-        # 检查是否需要压缩
-        history_text = "".join(
-            (m.content or "") for m in self._messages
-        )
+        history_text = "".join((m.content or "") for m in self._messages)
         history_tokens = self._budget.count_tokens(history_text)
 
         history = self._messages
         if self._budget.needs_compression(history_tokens):
-            history = compress_messages(
+            history = await compress_messages(
                 self._messages,
                 strategy=self._strategy,
                 keep_last_n=self._keep_last_n,
                 ref_store=self._ref_store,
+                model=model,
             )
 
         system_text = self._dynamic_prompt.render()
