@@ -49,7 +49,8 @@ cases:
         assert len(cases) == 3
 
     def test_load_real_cases(self):
-        cases = load_cases("evals/cases/")
+        cases_dir = Path(__file__).parent.parent / "evals" / "cases"
+        cases = load_cases(cases_dir)
         assert len(cases) >= 50
 
 

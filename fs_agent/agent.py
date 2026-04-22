@@ -1,7 +1,7 @@
-"""FSAgent — unified entry point for the file-management agent.
+"""FSAgent —— 文件管理 Agent 的统一入口。
 
-Replaces the duplicated setup code in cli.py, app.py and evals/runner.py.
-All three entry points should instantiate FSAgent and call run().
+替代了 cli.py、app.py 和 evals/runner.py 中重复的启动代码。
+以上三个入口应统一通过实例化 FSAgent 并调用 run() 来使用。
 """
 from __future__ import annotations
 
@@ -12,13 +12,14 @@ from pathlib import Path
 from scaffold.cache.cache import ResultCache
 from scaffold.context.budget import TokenBudget
 from scaffold.context.window import ContextWindow
+from scaffold.loop.checkpoint import CheckpointRecord, CheckpointStore
 from scaffold.loop.middleware import StepMiddleware
 from scaffold.loop.middlewares import CostTrackerMiddleware, RedactionMiddleware, ToolCallLimitMiddleware
 from scaffold.loop.middlewares.skill_trigger_middleware import SkillTriggerMiddleware
 from scaffold.loop.react import LoopConfig, LoopResult, ReActLoop
+from scaffold.models.base import Usage
 from scaffold.models.base import ChatModel
 from scaffold.models.openai_compat import OpenAICompatModel
-from scaffold.observability.storage import TraceStorage
 from scaffold.observability.tracer import Tracer
 from scaffold.prompts.loader import build_dynamic_prompt
 from scaffold.safety.injection import INJECTION_DEFENSE_PROMPT
@@ -30,6 +31,7 @@ from fs_agent.tools.file_tools import registry, set_sandbox
 
 import fs_agent.tools.doc_tools        # noqa: F401 — registers on import
 import fs_agent.tools.advanced_tools   # noqa: F401 — registers on import
+import fs_agent.tools.reference_tools  # noqa: F401 — registers retrieve_reference tool
 try:
     import fs_agent.tools.search_tools  # noqa: F401
 except ImportError:
@@ -51,14 +53,15 @@ class FSAgentConfig:
     permission: str = "confirm_write"
     cache_ttl: float = 300.0
     skills_dir: Path | None = None
+    checkpoint_db: str | None = "traces.db"
 
 
 class FSAgent:
-    """Self-contained file-management agent.
+    """独立的文件管理 Agent。
 
-    Instantiate once and call run() repeatedly.  Each run() creates a fresh
-    middleware stack so per-turn call counters start clean.  Pass the same
-    ContextWindow across calls to maintain conversational history.
+    实例化一次后可多次调用 run()。每次 run() 都会创建新的 Middleware 栈，
+    确保每轮的工具调用计数器从零开始。跨轮次保持对话历史时，
+    请将同一个 ContextWindow 传给每次 run() 调用。
     """
 
     def __init__(
@@ -100,11 +103,11 @@ class FSAgent:
             logger.info("Loaded %d skill(s) from %s", len(self._skills), skills_dir)
 
     # ------------------------------------------------------------------
-    # Public API
+    # 公开 API
     # ------------------------------------------------------------------
 
     def new_context(self) -> ContextWindow:
-        """Return a fresh ContextWindow configured for this agent."""
+        """返回一个为该 Agent 配置好的新 ContextWindow。"""
         return ContextWindow(system_prompt=self._dynamic_prompt, budget=self._budget)
 
     @property
@@ -118,32 +121,112 @@ class FSAgent:
         context: ContextWindow | None = None,
         tracer: Tracer | None = None,
     ) -> LoopResult:
-        """Run one agent turn.
+        """执行一轮 Agent 对话。
 
         Args:
-            user_input: The user's message for this turn.
-            context: ContextWindow to use.  If None a fresh one is created
-                     (stateless / single-turn mode).  Pass the same instance
-                     across calls to keep conversational history (stateful mode).
-            tracer: Optional tracer for observability.
+            user_input: 本轮用户的输入消息。
+            context:    要使用的 ContextWindow。若为 None 则创建新实例
+                        （无状态/单轮模式）。多轮对话时请复用同一实例以保留历史。
+            tracer:     可观测性追踪器（可选）。
         """
         ctx = context if context is not None else self.new_context()
+        self._wire_ref_store(ctx)
         tracer = tracer or Tracer()
         middlewares = self._build_middlewares()
 
+        checkpoint_store, run_id = self._open_checkpoint_store()
+        try:
+            loop = ReActLoop(
+                model=self._model,
+                tools=registry,
+                context=ctx,
+                config=self._loop_config,
+                tracer=tracer,
+                middlewares=middlewares,
+                checkpoint_store=checkpoint_store,
+                run_id=run_id,
+            )
+            return await loop.run(user_input)
+        finally:
+            if checkpoint_store:
+                checkpoint_store.close()
+
+    async def resume(
+        self,
+        run_id: str,
+        *,
+        checkpoint_db: str | None = None,
+        tracer: Tracer | None = None,
+    ) -> LoopResult:
+        """从已保存的检查点恢复中断的运行。
+
+        Args:
+            run_id:        要恢复的运行 ID（来自 list_incomplete_runs()）。
+            checkpoint_db: 检查点数据库路径，默认使用 config.checkpoint_db。
+            tracer:        可观测性追踪器（可选）。
+
+        Raises:
+            ValueError: 如果 run_id 不存在或已完成。
+        """
+        db = checkpoint_db or self._config.checkpoint_db or "traces.db"
+        store = CheckpointStore(db)
+        record = store.load(run_id)
+
+        if record is None:
+            store.close()
+            raise ValueError(f"Checkpoint '{run_id}' not found in {db!r}")
+        if record.completed:
+            store.close()
+            raise ValueError(f"Run '{run_id}' is already completed")
+
+        logger.info("Resuming run '%s' from step %d", run_id, record.step)
+
+        ctx = self.new_context()
+        for msg in record.messages:
+            ctx.add(msg)
+        self._wire_ref_store(ctx)
+
+        # Restore accumulated usage so budget tracking stays accurate
         loop = ReActLoop(
             model=self._model,
             tools=registry,
             context=ctx,
             config=self._loop_config,
-            tracer=tracer,
-            middlewares=middlewares,
+            tracer=tracer or Tracer(),
+            middlewares=self._build_middlewares(),
+            checkpoint_store=store,
+            run_id=run_id,
         )
-        return await loop.run(user_input)
+        loop._total_usage = record.usage
+
+        try:
+            return await loop.run(record.user_input, _resume_step=record.step)
+        finally:
+            store.close()
+
+    def list_incomplete_runs(self, *, checkpoint_db: str | None = None, limit: int = 10) -> list[CheckpointRecord]:
+        """返回尚未完成的运行列表（按最新更新时间降序）。"""
+        db = checkpoint_db or self._config.checkpoint_db or "traces.db"
+        store = CheckpointStore(db)
+        try:
+            return store.list_incomplete(limit=limit)
+        finally:
+            store.close()
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # 内部辅助方法
     # ------------------------------------------------------------------
+
+    def _wire_ref_store(self, ctx: ContextWindow) -> None:
+        from fs_agent.tools.reference_tools import set_ref_store
+        set_ref_store(ctx.ref_store)
+
+    def _open_checkpoint_store(self) -> tuple[CheckpointStore | None, str | None]:
+        if not self._config.checkpoint_db:
+            return None, None
+        store = CheckpointStore(self._config.checkpoint_db)
+        run_id = CheckpointStore.new_run_id()
+        return store, run_id
 
     def _build_middlewares(self) -> list[StepMiddleware]:
         ms: list[StepMiddleware] = [

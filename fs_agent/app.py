@@ -52,6 +52,8 @@ def _init_state() -> None:
         st.session_state.total_tokens = 0
     if "total_steps" not in st.session_state:
         st.session_state.total_steps = 0
+    if "resume_run_id" not in st.session_state:
+        st.session_state.resume_run_id = None  # 待恢复的 run_id
 
 _init_state()
 
@@ -148,6 +150,28 @@ with st.sidebar:
         st.session_state.total_steps = 0
         st.rerun()
 
+    # ── 未完成的运行（断点续跑）──────────────────────────────────────
+    try:
+        from scaffold.loop.checkpoint import CheckpointStore
+        import time as _time
+        _cp_store = CheckpointStore("traces.db")
+        _incomplete = _cp_store.list_incomplete(limit=5)
+        _cp_store.close()
+        if _incomplete:
+            st.divider()
+            st.subheader("⏸ 未完成的运行")
+            for rec in _incomplete:
+                ago = int(_time.time() - rec.updated_at)
+                ago_str = f"{ago // 60}m {ago % 60}s 前" if ago >= 60 else f"{ago}s 前"
+                label = rec.user_input[:40] + ("…" if len(rec.user_input) > 40 else "")
+                st.caption(f"步骤 {rec.step} · {ago_str}")
+                st.text(f"❝ {label} ❞")
+                if st.button("继续此运行", key=f"resume_{rec.run_id}", use_container_width=True):
+                    st.session_state.resume_run_id = rec.run_id
+                    st.rerun()
+    except Exception:
+        pass  # 数据库不存在或读取失败时静默忽略
+
 # ---------------------------------------------------------------------------
 # Agent 构建器（按配置缓存）
 # ---------------------------------------------------------------------------
@@ -185,6 +209,47 @@ for msg in st.session_state.messages:
                 f"Tokens：{meta.get('tokens', 0):,}  "
                 f"(prompt {meta.get('prompt_tokens', 0):,} + completion {meta.get('completion_tokens', 0):,})"
             )
+
+# ---------------------------------------------------------------------------
+# 断点续跑 —— 如果 sidebar 触发了 resume，在此处理
+# ---------------------------------------------------------------------------
+if st.session_state.resume_run_id:
+    _resume_id = st.session_state.resume_run_id
+    st.session_state.resume_run_id = None  # 清除，避免重复触发
+
+    if not api_key:
+        st.error("请在左侧侧边栏填写 API Key。")
+        st.stop()
+
+    with st.chat_message("assistant"):
+        status_box = st.status(f"恢复运行 {_resume_id[:8]}…", expanded=True)
+        answer_placeholder = st.empty()
+
+        try:
+            agent = _build_agent(
+                api_key=api_key, api_base=api_base, model=model_name,
+                workspace=str(workspace_path), permission_level=permission,
+                max_steps=max_steps,
+            )
+            from scaffold.observability.tracer import Tracer
+            result = asyncio.run(agent.resume(_resume_id, tracer=Tracer()))
+            status_box.update(label="恢复完成", state="complete", expanded=False)
+            final_answer = result.final_message or "(Agent 未返回文本回复)"
+            answer_placeholder.markdown(final_answer)
+            usage = result.total_usage
+            st.caption(f"步数：{result.steps}  |  Tokens：{usage.total_tokens:,}")
+            st.session_state.total_tokens += usage.total_tokens
+            st.session_state.total_steps += result.steps
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": final_answer,
+                "meta": {"steps": result.steps, "tokens": usage.total_tokens,
+                         "prompt_tokens": usage.prompt_tokens,
+                         "completion_tokens": usage.completion_tokens},
+            })
+        except Exception as e:
+            status_box.update(label="恢复失败", state="error", expanded=True)
+            answer_placeholder.error(f"恢复出错：{e}")
 
 # 聊天输入框
 user_input = st.chat_input("问我关于你文件的任何问题…")
