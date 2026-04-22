@@ -1,8 +1,8 @@
-"""Redaction middleware — strips sensitive data from tool results.
+"""脱敏 Middleware —— 从工具结果中移除敏感数据。
 
-Activates scaffold/safety/redaction.py which was previously unreachable dead code.
-Runs after every tool call and redacts API keys, passwords, emails, phone numbers,
-and Chinese ID numbers before the result is added to the conversation context.
+激活了此前未被调用的死代码 scaffold/safety/redaction.py。
+在每次工具调用后执行，将结果写入对话上下文之前，
+自动脱敏 API Key、密码、邮箱、手机号和中国身份证号。
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class RedactionMiddleware(StepMiddleware):
-    """Redact PII / secrets from tool results before they enter the context."""
+    """在工具结果写入上下文之前，对其中的 PII / 密钥进行脱敏处理。"""
 
     async def after_tool(
         self, ctx: StepContext, call: ToolCall, result: ToolResult

@@ -1,11 +1,10 @@
-"""Tool-call limit middleware — replaces the old _detect_loop mechanism.
+"""工具调用限制 Middleware —— 替代旧的 _detect_loop 机制。
 
-Improvements over the old exact-signature approach:
-- Tracks each (tool_name, args_hash) pair independently across steps.
-- Fires a warning the moment a *specific* call is repeated, not only when the
-  entire call *sequence* repeats.
-- repeat_limit / run_limit are independently configurable.
-- Warning is appended to the tool result itself so the model sees it in context.
+相比旧的精确签名方案的改进：
+- 跨步骤独立追踪每个 (tool_name, args_hash) 对。
+- 一旦*特定*调用被重复便立即触发警告，而不是等整个调用*序列*重复才报。
+- repeat_limit / run_limit 可独立配置。
+- 警告直接追加到工具结果中，使模型能在上下文中看到提示。
 """
 from __future__ import annotations
 
@@ -23,14 +22,14 @@ ExitBehavior = Literal["warn", "block"]
 
 
 class ToolCallLimitMiddleware(StepMiddleware):
-    """Detect and discourage repeated identical tool calls.
+    """检测并抑制重复的相同工具调用。
 
     Args:
-        repeat_limit: Max times the same (name, args_hash) pair may be called.
-                      On the Nth call a warning is appended to the tool result.
-        run_limit:    Optional cap on total calls per tool name in a run.
-        exit_behavior: "warn" appends a note to the result; "block" replaces
-                       the result with an error so the model stops calling.
+        repeat_limit: 相同 (name, args_hash) 对的最大允许调用次数。
+                      第 N 次调用时，会在工具结果中追加警告信息。
+        run_limit:    单次运行中每个工具名的总调用次数上限（可选）。
+        exit_behavior: "warn" 将提示追加到结果末尾；"block" 将结果替换为错误，
+                       以阻止模型继续调用。
     """
 
     def __init__(
@@ -42,9 +41,9 @@ class ToolCallLimitMiddleware(StepMiddleware):
         self._repeat_limit = repeat_limit
         self._run_limit = run_limit
         self._exit_behavior: ExitBehavior = exit_behavior
-        # (tool_name, args_hash) -> call count
+        # (tool_name, args_hash) -> 调用次数
         self._repeat_counts: dict[str, int] = {}
-        # tool_name -> total call count this run
+        # tool_name -> 本次运行的总调用次数
         self._run_counts: dict[str, int] = {}
 
     @staticmethod
@@ -55,10 +54,10 @@ class ToolCallLimitMiddleware(StepMiddleware):
     async def after_tool(
         self, ctx: StepContext, call: ToolCall, result: ToolResult
     ) -> ToolResult:
-        # Track per-run total
+        # 追踪本次运行的总调用次数
         self._run_counts[call.name] = self._run_counts.get(call.name, 0) + 1
 
-        # Track per-(name, args) repetitions
+        # 追踪每个 (name, args) 对的重复次数
         repeat_key = f"{call.name}:{self._args_hash(call.arguments)}"
         self._repeat_counts[repeat_key] = self._repeat_counts.get(repeat_key, 0) + 1
         repeat_count = self._repeat_counts[repeat_key]
@@ -97,7 +96,7 @@ class ToolCallLimitMiddleware(StepMiddleware):
                 is_error=True,
             )
 
-        # "warn": append to existing content
+        # "warn"：追加到现有内容末尾
         return ToolResult(
             tool_call_id=result.tool_call_id,
             name=result.name,

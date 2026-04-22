@@ -1,4 +1,4 @@
-"""Tests for scaffold/skills — Skill loader and SkillTriggerMiddleware."""
+"""scaffold/skills 的测试 —— Skill 加载器与 SkillTriggerMiddleware。"""
 from __future__ import annotations
 
 import textwrap
@@ -11,7 +11,7 @@ from scaffold.skills.loader import _parse_skill_file
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 def _write_skill(tmp_path: Path, content: str) -> Path:
@@ -146,10 +146,10 @@ class TestLoadSkills:
 # ---------------------------------------------------------------------------
 
 class TestSkillTriggerMiddleware:
-    """Tests for the middleware's trigger matching and prompt injection."""
+    """SkillTriggerMiddleware 触发匹配与提示词注入的测试。"""
 
     def _make_ctx(self, user_text: str, tmp_path: Path | None = None):
-        """Build a minimal StepContext with a user message."""
+        """构建一个包含用户消息的最简 StepContext。"""
         from unittest.mock import MagicMock, AsyncMock
         from scaffold.context.window import AgentPhase, ContextWindow, DynamicPrompt
         from scaffold.loop.middleware import StepContext
@@ -227,7 +227,7 @@ class TestSkillTriggerMiddleware:
             total_usage=Usage(),
         )
         await mw.before_step(ctx)
-        # context.prompt should never be touched
+        # context.prompt 不应被触碰
         ctx.context.prompt.set_phase_prompt.assert_not_called()
 
     @pytest.mark.asyncio

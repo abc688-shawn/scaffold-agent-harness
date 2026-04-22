@@ -1,4 +1,4 @@
-"""Tests for the middleware pipeline implementations."""
+"""Middleware 管道实现的测试。"""
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -12,7 +12,7 @@ from scaffold.tools.registry import ToolRegistry
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 def _make_ctx(step: int = 1) -> StepContext:
@@ -56,7 +56,7 @@ class TestToolCallLimitMiddleware:
         ctx = _make_ctx()
         call = _tool_call("list_files", {"path": "."})
 
-        # First two calls: no warning
+        # 前两次调用：无警告
         r1 = await mw.after_tool(ctx, call, _tool_result("r1"))
         r2 = await mw.after_tool(ctx, call, _tool_result("r2"))
         assert "⚠" not in (r1.content or "")
@@ -79,8 +79,8 @@ class TestToolCallLimitMiddleware:
         mw = ToolCallLimitMiddleware(repeat_limit=99, run_limit=2)
         ctx = _make_ctx()
 
-        # Different args each time → repeat_key never hits repeat_limit.
-        # run_limit=2 fires when run_count >= 2, i.e. from the 2nd call onward.
+        # 不同参数时 repeat_key 不同，不会触发 repeat_limit。
+        # run_limit=2 在 run_count >= 2 时触发，即从第 2 次调用开始。
         for i in range(3):
             call = _tool_call("list_files", {"path": str(i)})
             out = await mw.after_tool(ctx, call, _tool_result(f"r{i}"))
@@ -98,7 +98,7 @@ class TestToolCallLimitMiddleware:
         call_a = _tool_call("list_files", {"path": "/a"})
         call_b = _tool_call("list_files", {"path": "/b"})
 
-        # Each unique (name, args) pair has its own counter
+        # 每个唯一的 (name, args) 对都有独立的计数器
         r1 = await mw.after_tool(ctx, call_a, _tool_result("r1"))
         r2 = await mw.after_tool(ctx, call_b, _tool_result("r2"))
         assert "⚠" not in (r1.content or "")
@@ -116,7 +116,7 @@ class TestRedactionMiddleware:
         mw = RedactionMiddleware()
         ctx = _make_ctx()
         call = _tool_call()
-        # api_key pattern requires the secret value to be 20+ chars
+        # api_key 模式要求密钥值长度至少 20 个字符
         secret = "ABCDEFGHIJ1234567890XYZ"
         result = _tool_result(f"api_key={secret}")
 
@@ -173,11 +173,11 @@ class TestCostTrackerMiddleware:
 # ---------------------------------------------------------------------------
 
 class TestMiddlewarePipeline:
-    """Verify middlewares fire in the right order during a real loop run."""
+    """验证 Middleware 在真实循环运行中按正确顺序触发。"""
 
     @pytest.mark.asyncio
     async def test_after_tool_called_for_each_tool(self):
-        """after_tool should be called once per tool call per step."""
+        """after_tool 每步每次工具调用都应被调用一次。"""
         from scaffold.loop.react import LoopConfig, ReActLoop
         from scaffold.context.window import ContextWindow
         from scaffold.context.budget import TokenBudget

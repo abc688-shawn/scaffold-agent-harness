@@ -1,6 +1,6 @@
-"""Skill definition and loader.
+"""技能（Skill）定义与加载器。
 
-A Skill is a self-contained procedural knowledge unit stored as SKILL.md:
+技能是存储为 SKILL.md 的自包含过程知识单元：
 
     ---
     name: 文件整理
@@ -14,8 +14,8 @@ A Skill is a self-contained procedural knowledge unit stored as SKILL.md:
     # 正文（Markdown）— 运行时注入 system prompt
     ...
 
-Skills live in an agent-specific directory (e.g., fs_agent/skills/).
-The harness only loads and parses them; injection is handled by SkillTriggerMiddleware.
+技能文件存放在 agent 专属目录下（例如 fs_agent/skills/）。
+框架只负责加载和解析；注入由 SkillTriggerMiddleware 处理。
 """
 from __future__ import annotations
 
@@ -58,11 +58,11 @@ def _parse_skill_file(path: Path) -> Skill | None:
         logger.warning("YAML error in %s: %s", path, exc)
         return None
 
-    # allowed-tools: space-separated string or list
+    # allowed-tools：空格分隔的字符串或列表
     raw_tools = meta.get("allowed-tools", "")
     allowed_tools = raw_tools.split() if isinstance(raw_tools, str) else list(raw_tools)
 
-    # trigger-keywords: list or comma-separated string
+    # trigger-keywords：列表或逗号分隔的字符串
     raw_kws = meta.get("trigger-keywords", [])
     if isinstance(raw_kws, str):
         trigger_keywords = [k.strip() for k in raw_kws.split(",") if k.strip()]
@@ -83,7 +83,7 @@ def _parse_skill_file(path: Path) -> Skill | None:
 
 
 def load_skills(skills_dir: Path) -> list[Skill]:
-    """Recursively load all SKILL.md files under *skills_dir*."""
+    """递归加载 *skills_dir* 下所有 SKILL.md 文件。"""
     if not skills_dir.exists():
         return []
     skills = []

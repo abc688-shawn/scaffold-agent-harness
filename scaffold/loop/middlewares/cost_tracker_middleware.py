@@ -1,8 +1,8 @@
-"""Cost-tracker middleware — monitors token usage and cache efficiency.
+"""成本追踪 Middleware —— 监控 token 用量与缓存效率。
 
-Activates scaffold/cache/cache.py (ResultCache) which was previously unreachable.
-The registry's result cache is checked each step; hit/miss stats are logged at
-the end of the run to give a feedback loop on cache effectiveness.
+激活了此前未被调用的 scaffold/cache/cache.py（ResultCache）。
+每步都会检查注册表的结果缓存；运行结束时记录命中/未命中统计，
+以便评估缓存效果。
 """
 from __future__ import annotations
 
@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 
 
 class CostTrackerMiddleware(StepMiddleware):
-    """Log token spend per step and warn when the budget is running low.
+    """记录每步的 token 消耗，并在预算不足时发出警告。
 
     Args:
-        warn_fraction: Emit a WARNING when total_tokens / max_total_tokens
-                       exceeds this fraction (default 0.8 = 80 %).
-        result_cache:  Optional ResultCache to report hit/miss stats.
-                       Pass the same cache instance you gave to ToolRegistry.
+        warn_fraction: 当 total_tokens / max_total_tokens 超过此比例时触发 WARNING
+                       （默认 0.8，即 80%）。
+        result_cache:  可选的 ResultCache，用于上报命中/未命中统计。
+                       传入与 ToolRegistry 相同的缓存实例即可。
     """
 
     def __init__(

@@ -1,13 +1,13 @@
-"""Middleware protocol for the ReAct loop.
+"""ReAct 循环的 Middleware 协议。
 
-Each middleware gets four call-points per step:
-    before_step  — before building the prompt and calling the LLM
-    after_llm    — after the LLM responds, before tool execution
-    after_tool   — after each individual tool executes (returns a possibly-modified ToolResult)
-    after_step   — after all tools in a step are processed
+每步有四个切点：
+    before_step  — 构建提示词并调用 LLM 之前
+    after_llm    — LLM 响应之后、工具执行之前
+    after_tool   — 每个工具执行后（返回可能被修改的 ToolResult）
+    after_step   — 该步骤中所有工具都处理完之后
 
-Concrete middlewares should subclass StepMiddleware and override only the hooks
-they care about; all default implementations are no-ops.
+具体的 Middleware 应继承 StepMiddleware，只需覆盖关心的钩子；
+所有默认实现均为空操作（no-op）。
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from scaffold.tools.registry import ToolRegistry
 
 @dataclass
 class StepContext:
-    """Shared loop state threaded through every middleware hook."""
+    """每个 Middleware 钩子都会传入的共享循环状态。"""
 
     step: int
     context: ContextWindow
@@ -32,9 +32,9 @@ class StepContext:
 
 
 class StepMiddleware:
-    """Base class for ReAct loop middleware.
+    """ReAct 循环 Middleware 的基类。
 
-    Subclass and override only the hooks you need.
+    子类只需覆盖所需的钩子即可。
     """
 
     async def before_step(self, ctx: StepContext) -> None:

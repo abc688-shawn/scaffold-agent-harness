@@ -1,5 +1,5 @@
 ---
-name: 文件整理
+name: file-organize
 description: 当用户提到整理、归类、标签化或按类型分组文件时触发
 trigger-keywords: [整理, 归类, 标签, tag, 分组, 按类型, 归档, 分类]
 allowed-tools: list_files file_info organize_files tag_files move_file rename_file make_directory

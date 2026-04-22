@@ -1,10 +1,10 @@
-"""Jinja2 prompt template loader.
+"""Jinja2 提示词模板加载器。
 
-Templates live under scaffold/prompts/ and are referenced by relative path,
-e.g. render("system/fs_agent.j2", workspace="/tmp").
+模板存放在 scaffold/prompts/ 下，通过相对路径引用，
+例如 render("system/fs_agent.j2", workspace="/tmp")。
 
-build_dynamic_prompt() is a convenience factory that renders the base template
-and pre-registers phase-specific sections into a DynamicPrompt object.
+build_dynamic_prompt() 是一个便捷工厂函数，用于渲染基础模板
+并将各阶段专属片段预注册到 DynamicPrompt 对象中。
 """
 from __future__ import annotations
 
@@ -33,18 +33,18 @@ def _get_env() -> jinja2.Environment:
 
 
 def render(template_path: str, **kwargs: Any) -> str:
-    """Render a prompt template by relative path, e.g. 'system/fs_agent.j2'."""
+    """通过相对路径渲染提示词模板，例如 'system/fs_agent.j2'。"""
     return _get_env().get_template(template_path).render(**kwargs)
 
 
 def build_dynamic_prompt(base_template: str, **kwargs: Any) -> DynamicPrompt:
-    """Render *base_template* and return a DynamicPrompt with phase sections loaded.
+    """渲染 *base_template*，并返回已加载各阶段片段的 DynamicPrompt。
 
-    Phase sections are looked up from:
+    阶段片段从以下路径查找：
         system/phase_planning.j2
         system/phase_reflection.j2
 
-    Missing phase templates are silently skipped so base-only agents still work.
+    缺失的阶段模板会被静默跳过，以兼容仅使用基础提示词的 agent。
     """
     base_text = render(base_template, **kwargs)
     dp = DynamicPrompt(base_text)

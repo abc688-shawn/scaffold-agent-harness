@@ -1,5 +1,5 @@
 ---
-name: 批量对比
+name: batch-compare
 description: 当用户要对比两个或多个文件、找出差异或共同点时触发
 trigger-keywords: [对比, 比较, 找差异, 差异, 不同, 相同, 哪里变了, 区别]
 allowed-tools: read_file file_info list_files search_in_file

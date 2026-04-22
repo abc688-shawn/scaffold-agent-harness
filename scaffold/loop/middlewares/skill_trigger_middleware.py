@@ -1,12 +1,11 @@
-"""Skill trigger middleware — detects keywords and injects skill context.
+"""技能触发 Middleware —— 检测关键词并注入技能上下文。
 
-On the first step of every turn, scans the latest user message for trigger
-keywords. If a matching skill is found its body is injected into the EXECUTION
-phase section of DynamicPrompt, so the model sees structured guidance alongside
-the base system prompt without the base prompt being rewritten.
+在每轮的第一步扫描最新的用户消息，检查是否命中触发关键词。
+若找到匹配技能，则将其正文注入 DynamicPrompt 的 EXECUTION 阶段片段，
+使模型在不重写基础 system prompt 的前提下看到结构化指导。
 
-Setting the phase section to "" on each step-1 also clears any skill injected
-by a previous turn, so a fresh skill match is performed every time.
+每次第 1 步时将阶段片段重置为 ""，以清除上一轮注入的技能，
+确保每轮都重新匹配。
 """
 from __future__ import annotations
 
@@ -21,10 +20,10 @@ logger = logging.getLogger(__name__)
 
 
 class SkillTriggerMiddleware(StepMiddleware):
-    """Keyword-based skill injection into the EXECUTION phase prompt.
+    """基于关键词匹配，将技能注入 EXECUTION 阶段提示词。
 
     Args:
-        skills: Pre-loaded Skill objects (from load_skills()).
+        skills: 已预加载的 Skill 对象列表（来自 load_skills()）。
     """
 
     def __init__(self, skills: list[Skill]) -> None:
@@ -35,7 +34,7 @@ class SkillTriggerMiddleware(StepMiddleware):
         if not self._skills or ctx.step != 1:
             return
 
-        # Clear any skill section from a previous turn.
+        # 清除上一轮注入的技能片段。
         ctx.context.prompt.set_phase_prompt(AgentPhase.EXECUTION, "")
         self._triggered = None
 
@@ -73,5 +72,5 @@ class SkillTriggerMiddleware(StepMiddleware):
 
     @property
     def triggered(self) -> Skill | None:
-        """The skill active during the current turn, or None."""
+        """当前轮次激活的技能，若未命中则为 None。"""
         return self._triggered

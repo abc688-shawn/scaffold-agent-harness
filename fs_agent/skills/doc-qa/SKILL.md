@@ -1,5 +1,5 @@
 ---
-name: 文档问答
+name: doc-qa
 description: 当用户要求总结、摘要、解读某个文档内容时触发
 trigger-keywords: [总结, 概述, 摘要, 讲什么, 说了什么, 解读, 内容, 归纳, 提炼]
 allowed-tools: read_file file_info list_files search_in_file
