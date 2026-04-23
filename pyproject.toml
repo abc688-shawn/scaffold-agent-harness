@@ -27,6 +27,9 @@ fs = [
 eval = [
     "tabulate>=0.9",
 ]
+mcp = [
+    "mcp>=1.0",
+]
 ui = [
     "streamlit>=1.30",
 ]

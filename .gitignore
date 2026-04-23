@@ -17,3 +17,5 @@ traces.db
 workspace/
 docs/
 .DS_Store
+CLAUDE.md
+demo.py

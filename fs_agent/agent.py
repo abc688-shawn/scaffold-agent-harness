@@ -37,6 +37,10 @@ try:
     import fs_agent.tools.search_tools  # noqa: F401
 except ImportError:
     pass
+try:
+    import fs_agent.tools.mcp_tools     # noqa: F401 — registers MCP-proxied tools
+except ImportError:
+    pass
 
 logger = logging.getLogger(__name__)
 
