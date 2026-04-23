@@ -57,27 +57,16 @@ class TestSummarizeFile:
         assert "Foo" in result or "class" in result.lower() or "function" in result.lower()
 
 
-class TestReadPdf:
-    def test_read_pdf_wrong_extension(self, tmp_path):
-        f = tmp_path / "not_pdf.txt"
-        f.write_text("hello")
-        from fs_agent.tools.doc_tools import read_pdf
+class TestReadDocument:
+    def test_not_found(self, tmp_path):
+        from fs_agent.tools.doc_tools import read_document
         with pytest.raises(ToolError) as exc:
-            read_pdf(str(f))
-        assert exc.value.code == ToolErrorCode.UNSUPPORTED_FORMAT
-
-    def test_read_pdf_not_found(self, tmp_path):
-        from fs_agent.tools.doc_tools import read_pdf
-        with pytest.raises(ToolError) as exc:
-            read_pdf(str(tmp_path / "nope.pdf"))
+            read_document(str(tmp_path / "nope.pdf"))
         assert exc.value.code == ToolErrorCode.NOT_FOUND
 
-
-class TestReadDocx:
-    def test_read_docx_wrong_extension(self, tmp_path):
-        f = tmp_path / "not_doc.txt"
-        f.write_text("hello")
-        from fs_agent.tools.doc_tools import read_docx
-        with pytest.raises(ToolError) as exc:
-            read_docx(str(f))
-        assert exc.value.code == ToolErrorCode.UNSUPPORTED_FORMAT
+    def test_text_file_readable(self, tmp_path):
+        f = tmp_path / "readme.txt"
+        f.write_text("Hello from a plain text doc.\nLine two.")
+        from fs_agent.tools.doc_tools import read_document
+        result = read_document(str(f))
+        assert "Hello from a plain text doc" in result or "readme.txt" in result

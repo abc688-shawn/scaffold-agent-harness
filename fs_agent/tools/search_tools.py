@@ -120,7 +120,7 @@ class EmbeddingClient:
         try:
             from openai import AsyncOpenAI
         except ImportError:
-            raise ToolError(ToolErrorCode.INTERNAL, "openai package required for embeddings")
+            raise ToolError(ToolErrorCode.INTERNAL_ERROR, "openai package required for embeddings")
 
         client = AsyncOpenAI(api_key=self._api_key, base_url=self._base_url or None)
         response = await client.embeddings.create(model=self._model, input=texts)
@@ -180,6 +180,11 @@ def configure_search(
         _store.load(index_path)
 
 
+def get_embed_client() -> EmbeddingClient | None:
+    """返回当前配置的 embedding 客户端（未配置时返回 None）。"""
+    return _embed_client
+
+
 # ---------------------------------------------------------------------------
 # 工具：index_files
 # ---------------------------------------------------------------------------
@@ -196,7 +201,7 @@ async def index_files(path: str = ".", pattern: str = "*.py", recursive: bool = 
     recursive: 是否递归搜索子目录。
     """
     if _embed_client is None:
-        raise ToolError(ToolErrorCode.INTERNAL, "Embedding client not configured.")
+        raise ToolError(ToolErrorCode.INTERNAL_ERROR, "Embedding client not configured.")
 
     resolved = _check_sandbox(path)
     if not resolved.is_dir():
@@ -269,11 +274,11 @@ async def semantic_search(query: str, top_k: int = 5) -> str:
     top_k: 返回结果数量。
     """
     if _embed_client is None:
-        raise ToolError(ToolErrorCode.INTERNAL, "Embedding client not configured.")
+        raise ToolError(ToolErrorCode.INTERNAL_ERROR, "Embedding client not configured.")
 
     if _store.total_chunks == 0:
         raise ToolError(
-            ToolErrorCode.PRECONDITION,
+            ToolErrorCode.INVALID_ARGUMENTS,
             "No files indexed yet. Call index_files first.",
         )
 

@@ -32,6 +32,7 @@ from fs_agent.tools.file_tools import registry, set_sandbox
 import fs_agent.tools.doc_tools        # noqa: F401 — registers on import
 import fs_agent.tools.advanced_tools   # noqa: F401 — registers on import
 import fs_agent.tools.reference_tools  # noqa: F401 — registers retrieve_reference tool
+import fs_agent.tools.skill_tools      # noqa: F401 — registers list_skills tool
 try:
     import fs_agent.tools.search_tools  # noqa: F401
 except ImportError:
@@ -54,6 +55,9 @@ class FSAgentConfig:
     cache_ttl: float = 300.0
     skills_dir: Path | None = None
     checkpoint_db: str | None = "traces.db"
+    embedding_api_key: str = ""
+    embedding_api_base: str = ""
+    embedding_model: str = ""
 
 
 class FSAgent:
@@ -101,6 +105,11 @@ class FSAgent:
         self._skills = load_skills(skills_dir)
         if self._skills:
             logger.info("Loaded %d skill(s) from %s", len(self._skills), skills_dir)
+
+        from fs_agent.tools.skill_tools import set_skills
+        set_skills(self._skills)
+
+        self._configure_embedding(config)
 
     # ------------------------------------------------------------------
     # 公开 API
@@ -216,6 +225,19 @@ class FSAgent:
     # ------------------------------------------------------------------
     # 内部辅助方法
     # ------------------------------------------------------------------
+
+    def _configure_embedding(self, config: FSAgentConfig) -> None:
+        import os
+        try:
+            from fs_agent.tools.search_tools import configure_search, EmbeddingClient
+        except ImportError:
+            return
+        key = config.embedding_api_key or os.environ.get("EMBEDDING_API_KEY", "")
+        base = config.embedding_api_base or os.environ.get("EMBEDDING_API_BASE", "")
+        model = config.embedding_model or os.environ.get("EMBEDDING_MODEL_NAME", "")
+        if key and model:
+            configure_search(EmbeddingClient(api_key=key, base_url=base or None, model=model))
+            logger.info("Embedding client configured: model=%s", model)
 
     def _wire_ref_store(self, ctx: ContextWindow) -> None:
         from fs_agent.tools.reference_tools import set_ref_store

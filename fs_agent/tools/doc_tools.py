@@ -1,10 +1,13 @@
-"""文档处理工具 —— PDF、DOCX 与富预览能力。
+"""文档处理工具 —— 统一读取、预览与语义段落检索。
 
-在基础文件工具之上补充了特定格式的读取器。
-可选依赖包括：pymupdf（PDF）、python-docx（DOCX）、chardet（编码检测）。
+使用 MarkItDown 将 PDF、DOCX、PPTX、XLSX 等格式统一转换为 Markdown。
+search_document 工具在首次调用时对文档分块建立向量索引，后续查询复用缓存。
+
+可选依赖：markitdown[pdf,docx]、chardet（编码检测）。
 """
 from __future__ import annotations
 
+import hashlib
 import mimetypes
 from pathlib import Path
 
@@ -12,122 +15,140 @@ from scaffold.tools.errors import ToolError, ToolErrorCode
 
 from fs_agent.tools.file_tools import registry, _check_sandbox
 
+# MarkItDown 能处理的富文档格式（除此之外走普通文本路径）
+_RICH_FORMATS = {".pdf", ".docx", ".pptx", ".xlsx", ".xls", ".html", ".htm", ".msg", ".eml"}
+
+# 文档向量索引缓存：str(resolved_path) -> (file_hash, VectorStore)
+_doc_stores: dict = {}
+
 
 # ---------------------------------------------------------------------------
-# 工具：read_pdf
+# 工具：read_document
 # ---------------------------------------------------------------------------
 
 @registry.tool
-def read_pdf(path: str, pages: str = "all", max_pages: int = 50) -> str:
-    """读取 PDF 文件中的文本内容，适用于 `.pdf` 文件。
+def read_document(path: str, max_chars: int = 50_000) -> str:
+    """读取文档内容并转换为 Markdown，支持 PDF、DOCX、PPTX、XLSX 等格式。
 
-    对 PDF 应优先使用它而不是 `read_file`，因为 `read_file` 返回的是原始字节。
+    对 .pdf / .docx / .pptx / .xlsx 等富文本格式，优先使用它而非 read_file
+    （read_file 返回的是原始字节）。转换结果保留标题、表格等文档结构。
 
-    path: PDF 文件路径。
-    pages: 要读取的页码。`all` 表示全部，`1-5` 表示范围，`1,3,5` 表示指定页。
-    max_pages: 最多提取的页数（安全限制）。
+    若只需查找文档中的特定内容，请改用 search_document——它只返回相关段落，
+    不会把整个文档塞入上下文。
+
+    path: 文档路径。
+    max_chars: 最多返回的字符数（默认 50000）。
     """
     resolved = _check_sandbox(path)
     if not resolved.is_file():
         raise ToolError(ToolErrorCode.NOT_FOUND, f"'{path}' is not a file.")
-    if resolved.suffix.lower() != ".pdf":
-        raise ToolError(ToolErrorCode.UNSUPPORTED_FORMAT, f"'{path}' is not a PDF file.")
 
     try:
-        import fitz  # pymupdf 库
+        from markitdown import MarkItDown
     except ImportError:
         raise ToolError(
-            ToolErrorCode.INTERNAL,
-            "PDF support requires pymupdf. Install with: pip install pymupdf",
+            ToolErrorCode.INTERNAL_ERROR,
+            "Document support requires markitdown. Install with: pip install 'markitdown[pdf,docx]'",
         )
 
     try:
-        doc = fitz.open(str(resolved))
+        md = MarkItDown()
+        result = md.convert(str(resolved))
+        text = result.text_content
     except Exception as e:
-        raise ToolError(ToolErrorCode.INTERNAL, f"Failed to open PDF: {e}")
+        raise ToolError(ToolErrorCode.INTERNAL_ERROR, f"Failed to read document: {e}")
 
-    total_pages = len(doc)
-    page_indices = _parse_page_range(pages, total_pages)
-    if len(page_indices) > max_pages:
-        page_indices = page_indices[:max_pages]
+    fmt = resolved.suffix.upper().lstrip(".")
+    header = f"[{fmt}: {resolved.name}]"
+    if len(text) > max_chars:
+        return f"{header}\n{text[:max_chars]}\n... (truncated, {len(text):,} total chars)"
+    return f"{header}\n{text}"
 
-    parts: list[str] = []
-    parts.append(f"[PDF: {resolved.name} | {total_pages} pages | extracting {len(page_indices)} page(s)]")
 
-    for idx in page_indices:
-        page = doc[idx]
-        text = page.get_text()
-        if text.strip():
-            parts.append(f"\n--- Page {idx + 1} ---\n{text.strip()}")
-        else:
-            parts.append(f"\n--- Page {idx + 1} ---\n(no extractable text)")
+# ---------------------------------------------------------------------------
+# 工具：search_document
+# ---------------------------------------------------------------------------
 
-    doc.close()
+@registry.tool
+async def search_document(path: str, query: str, top_k: int = 5) -> str:
+    """在单个文档内按语义相似度检索相关段落。
+
+    适合大文档的定向查询，无需读取全文。首次调用时自动将文档分块并建立
+    向量索引；文件内容未变时直接复用缓存，无需重复嵌入。
+
+    需要配置 Embedding 服务（EMBEDDING_API_KEY + EMBEDDING_MODEL_NAME）。
+
+    path: 文档路径（PDF、DOCX、PPTX、XLSX 等）。
+    query: 用自然语言描述要查找的内容。
+    top_k: 返回的相关段落数量。
+    """
+    try:
+        from fs_agent.tools.search_tools import get_embed_client, VectorStore, Chunk
+    except ImportError:
+        raise ToolError(ToolErrorCode.INTERNAL_ERROR, "search_tools module not available.")
+
+    embed_client = get_embed_client()
+    if embed_client is None:
+        raise ToolError(
+            ToolErrorCode.INTERNAL_ERROR,
+            "Embedding client not configured. Set EMBEDDING_API_KEY and EMBEDDING_MODEL_NAME in .env.",
+        )
+
+    resolved = _check_sandbox(path)
+    if not resolved.is_file():
+        raise ToolError(ToolErrorCode.NOT_FOUND, f"'{path}' is not a file.")
+
+    file_bytes = resolved.read_bytes()
+    file_hash = hashlib.sha256(file_bytes).hexdigest()[:16]
+    str_path = str(resolved)
+
+    cached = _doc_stores.get(str_path)
+    if cached is None or cached[0] != file_hash:
+        try:
+            from markitdown import MarkItDown
+        except ImportError:
+            raise ToolError(
+                ToolErrorCode.INTERNAL_ERROR,
+                "markitdown required. Install with: pip install 'markitdown[pdf,docx]'",
+            )
+        try:
+            md_parser = MarkItDown()
+            result = md_parser.convert(str_path)
+            text = result.text_content
+        except Exception as e:
+            raise ToolError(ToolErrorCode.INTERNAL_ERROR, f"Failed to parse document: {e}")
+
+        if not text.strip():
+            raise ToolError(ToolErrorCode.INTERNAL_ERROR, "Document appears to be empty.")
+
+        raw_chunks = _chunk_document(text)
+        embeddings = await embed_client.embed(raw_chunks)
+
+        store = VectorStore()
+        for chunk_text, emb in zip(raw_chunks, embeddings):
+            store.add(Chunk(
+                text=chunk_text,
+                file_path=resolved.name,
+                start_line=0,
+                end_line=0,
+                file_hash=file_hash,
+                embedding=emb,
+            ))
+
+        _doc_stores[str_path] = (file_hash, store)
+    else:
+        store = cached[1]
+
+    query_emb = await embed_client.embed_single(query)
+    results = store.search(query_emb, top_k=top_k)
+
+    if not results:
+        return f"No relevant content found in '{resolved.name}' for: '{query}'"
+
+    parts = [f"Top {len(results)} passage(s) in '{resolved.name}' for: '{query}'\n"]
+    for i, (chunk, score) in enumerate(results, 1):
+        parts.append(f"[{i}] relevance: {score:.3f}\n{chunk.text}\n")
     return "\n".join(parts)
-
-
-# ---------------------------------------------------------------------------
-# 工具：read_docx
-# ---------------------------------------------------------------------------
-
-@registry.tool
-def read_docx(path: str, max_paragraphs: int = 500) -> str:
-    """读取 Word 文档（`.docx`）中的文本内容，适用于 `.docx` 文件。
-
-    path: Word 文档路径。
-    max_paragraphs: 最多提取的段落数。
-    """
-    resolved = _check_sandbox(path)
-    if not resolved.is_file():
-        raise ToolError(ToolErrorCode.NOT_FOUND, f"'{path}' is not a file.")
-    if resolved.suffix.lower() != ".docx":
-        raise ToolError(ToolErrorCode.UNSUPPORTED_FORMAT, f"'{path}' is not a .docx file.")
-
-    try:
-        from docx import Document
-    except ImportError:
-        raise ToolError(
-            ToolErrorCode.INTERNAL,
-            "DOCX support requires python-docx. Install with: pip install python-docx",
-        )
-
-    try:
-        doc = Document(str(resolved))
-    except Exception as e:
-        raise ToolError(ToolErrorCode.INTERNAL, f"Failed to open document: {e}")
-
-    paragraphs = []
-    for i, para in enumerate(doc.paragraphs):
-        if i >= max_paragraphs:
-            break
-        text = para.text.strip()
-        if text:
-            # 保留标题结构
-            if para.style and para.style.name.startswith("Heading"):
-                level = para.style.name.replace("Heading ", "")
-                try:
-                    hashes = "#" * int(level)
-                except ValueError:
-                    hashes = "#"
-                paragraphs.append(f"{hashes} {text}")
-            else:
-                paragraphs.append(text)
-
-    # 同时提取表格内容
-    tables_text = []
-    for t_idx, table in enumerate(doc.tables):
-        rows = []
-        for row in table.rows:
-            cells = [cell.text.strip() for cell in row.cells]
-            rows.append(" | ".join(cells))
-        if rows:
-            tables_text.append(f"\n[Table {t_idx + 1}]\n" + "\n".join(rows))
-
-    header = f"[DOCX: {resolved.name} | {len(doc.paragraphs)} paragraphs | {len(doc.tables)} tables]"
-    body = "\n\n".join(paragraphs[:max_paragraphs])
-    tables = "\n".join(tables_text) if tables_text else ""
-
-    return f"{header}\n\n{body}{tables}"
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +160,7 @@ def preview_file(path: str) -> str:
     """获取任意文件的智能预览，自动检测格式并提取关键信息。
 
     当你不了解文件格式，只想快速看一眼时可以使用它。
-    支持：文本、PDF、DOCX、代码、CSV、JSON、YAML。
+    支持：PDF、DOCX、PPTX、XLSX、文本、代码、CSV、JSON、YAML。
 
     path: 需要预览的文件路径。
     """
@@ -150,11 +171,8 @@ def preview_file(path: str) -> str:
     size = resolved.stat().st_size
     suffix = resolved.suffix.lower()
 
-    # 分发到对应的专用读取器
-    if suffix == ".pdf":
-        return read_pdf(path, pages="1-3", max_pages=3)
-    elif suffix == ".docx":
-        return read_docx(path, max_paragraphs=30)
+    if suffix in _RICH_FORMATS:
+        return read_document(path, max_chars=5_000)
     elif suffix in (".csv", ".tsv"):
         return _preview_csv(resolved, suffix)
     elif suffix in (".json", ".yaml", ".yml"):
@@ -172,7 +190,7 @@ def summarize_file(path: str) -> str:
     """提取文件的关键结构信息，帮助快速理解内容。
 
     返回内容包括：文件类型、大小、结构信息（例如文档标题、代码函数名等）。
-    它不会读取完整内容；若需全文，请使用 `read_file` 或 `read_pdf`。
+    它不会读取完整内容；若需全文，请使用 read_file 或 read_document。
 
     path: 文件路径。
     """
@@ -190,34 +208,21 @@ def summarize_file(path: str) -> str:
         f"Type: {mime or 'unknown'} ({suffix or 'no extension'})",
     ]
 
-    if suffix == ".pdf":
+    if suffix in _RICH_FORMATS:
         try:
-            import fitz
-            doc = fitz.open(str(resolved))
-            info.append(f"Pages: {len(doc)}")
-            toc = doc.get_toc()
-            if toc:
-                info.append("Table of Contents:")
-                for level, title, page in toc[:20]:
-                    indent = "  " * (level - 1)
-                    info.append(f"  {indent}{title} (p.{page})")
-            doc.close()
-        except ImportError:
-            info.append("(PDF details require pymupdf)")
-    elif suffix == ".docx":
-        try:
-            from docx import Document
-            doc = Document(str(resolved))
-            info.append(f"Paragraphs: {len(doc.paragraphs)}")
-            info.append(f"Tables: {len(doc.tables)}")
-            headings = [p.text for p in doc.paragraphs
-                        if p.style and p.style.name.startswith("Heading")]
+            from markitdown import MarkItDown
+            md = MarkItDown()
+            result = md.convert(str(resolved))
+            text = result.text_content
+            headings = [ln.strip() for ln in text.splitlines() if ln.strip().startswith("#")]
             if headings:
                 info.append("Headings:")
                 for h in headings[:15]:
-                    info.append(f"  - {h}")
+                    info.append(f"  {h}")
         except ImportError:
-            info.append("(DOCX details require python-docx)")
+            info.append("(document details require markitdown)")
+        except Exception as e:
+            info.append(f"(failed to extract structure: {e})")
     elif suffix in (".py", ".js", ".ts", ".java", ".go", ".rs"):
         info.extend(_summarize_code(resolved))
     elif suffix in (".csv", ".tsv"):
@@ -230,23 +235,30 @@ def summarize_file(path: str) -> str:
 # 内部辅助函数
 # ---------------------------------------------------------------------------
 
-def _parse_page_range(spec: str, total: int) -> list[int]:
-    """将页码规格解析为从 0 开始的索引列表。"""
-    if spec.strip().lower() == "all":
-        return list(range(total))
-    indices = []
-    for part in spec.split(","):
-        part = part.strip()
-        if "-" in part:
-            a, b = part.split("-", 1)
-            start = max(0, int(a) - 1)
-            end = min(total, int(b))
-            indices.extend(range(start, end))
+def _chunk_document(text: str, min_chars: int = 200, max_chars: int = 800) -> list[str]:
+    """Mobius 风格的段落分块：按双换行分段，合并过短的碎片。"""
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+
+    chunks: list[str] = []
+    buffer = ""
+
+    for para in paragraphs:
+        candidate = (buffer + "\n\n" + para).strip() if buffer else para
+        if len(candidate) <= max_chars:
+            buffer = candidate
         else:
-            idx = int(part) - 1
-            if 0 <= idx < total:
-                indices.append(idx)
-    return indices
+            if buffer:
+                chunks.append(buffer)
+            # 如果单个段落超出 max_chars，强制截断为多块
+            while len(para) > max_chars:
+                chunks.append(para[:max_chars])
+                para = para[max_chars:]
+            buffer = para
+
+    if buffer:
+        chunks.append(buffer)
+
+    return chunks
 
 
 def _preview_csv(path: Path, suffix: str) -> str:
@@ -266,7 +278,6 @@ def _preview_csv(path: Path, suffix: str) -> str:
 
 def _preview_structured(path: Path) -> str:
     text = path.read_text(encoding="utf-8", errors="replace")
-    # 预览最多截断到 3000 个字符
     if len(text) > 3000:
         return f"[{path.suffix.upper()}: {path.name} | {len(text):,} chars]\n{text[:3000]}\n... (truncated)"
     return f"[{path.suffix.upper()}: {path.name} | {len(text):,} chars]\n{text}"
@@ -274,7 +285,6 @@ def _preview_structured(path: Path) -> str:
 
 def _preview_text(path: Path, size: int) -> str:
     try:
-        # 检测编码
         try:
             import chardet
             raw = path.read_bytes()[:10000]
@@ -294,24 +304,19 @@ def _preview_text(path: Path, size: int) -> str:
 
 
 def _summarize_code(path: Path) -> list[str]:
-    """从源代码中提取函数名和类名。"""
     info: list[str] = []
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
         lines = text.splitlines()
         info.append(f"Lines: {len(lines)}")
-
         functions = []
         classes = []
         for line in lines:
             stripped = line.strip()
             if stripped.startswith("def "):
-                name = stripped.split("(")[0].replace("def ", "")
-                functions.append(name)
+                functions.append(stripped.split("(")[0].replace("def ", ""))
             elif stripped.startswith("class "):
-                name = stripped.split("(")[0].split(":")[0].replace("class ", "")
-                classes.append(name)
-
+                classes.append(stripped.split("(")[0].split(":")[0].replace("class ", ""))
         if classes:
             info.append(f"Classes: {', '.join(classes[:10])}")
         if functions:
@@ -342,5 +347,5 @@ def _human_size(size: int) -> str:
     for unit in ("B", "KB", "MB", "GB"):
         if size < 1024:
             return f"{size:.1f} {unit}"
-        size /= 1024  # type: ignore  # 这里接受浮点递减
+        size /= 1024  # type: ignore
     return f"{size:.1f} TB"
