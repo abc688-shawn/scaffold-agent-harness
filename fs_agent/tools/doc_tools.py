@@ -18,9 +18,6 @@ from fs_agent.tools.file_tools import registry, _check_sandbox
 # MarkItDown 能处理的富文档格式（除此之外走普通文本路径）
 _RICH_FORMATS = {".pdf", ".docx", ".pptx", ".xlsx", ".xls", ".html", ".htm", ".msg", ".eml"}
 
-# 文档向量索引缓存：str(resolved_path) -> (file_hash, VectorStore)
-_doc_stores: dict = {}
-
 
 # ---------------------------------------------------------------------------
 # 工具：read_document
@@ -83,16 +80,11 @@ async def search_document(path: str, query: str, top_k: int = 5) -> str:
     top_k: 返回的相关段落数量。
     """
     try:
-        from fs_agent.tools.search_tools import get_embed_client, VectorStore, Chunk
+        from fs_agent.tools.search_tools import _get_doc_collection
     except ImportError:
         raise ToolError(ToolErrorCode.INTERNAL_ERROR, "search_tools module not available.")
 
-    embed_client = get_embed_client()
-    if embed_client is None:
-        raise ToolError(
-            ToolErrorCode.INTERNAL_ERROR,
-            "Embedding client not configured. Set EMBEDDING_API_KEY and EMBEDDING_MODEL_NAME in .env.",
-        )
+    coll = _get_doc_collection()  # raises ToolError if not configured
 
     resolved = _check_sandbox(path)
     if not resolved.is_file():
@@ -100,20 +92,26 @@ async def search_document(path: str, query: str, top_k: int = 5) -> str:
 
     file_bytes = resolved.read_bytes()
     file_hash = hashlib.sha256(file_bytes).hexdigest()[:16]
-    str_path = str(resolved)
+    doc_path = str(resolved)
 
-    cached = _doc_stores.get(str_path)
-    if cached is None or cached[0] != file_hash:
+    # 检查该文档的当前 hash 是否已建立索引
+    existing = coll.get(
+        where={"$and": [{"doc_path": doc_path}, {"doc_hash": file_hash}]},
+        limit=1,
+        include=["documents"],
+    )
+
+    if not existing["documents"]:
         try:
             from markitdown import MarkItDown
         except ImportError:
             raise ToolError(
                 ToolErrorCode.INTERNAL_ERROR,
-                "markitdown required. Install with: pip install 'markitdown[pdf,docx]'",
+                "markitdown required. Install with: uv sync --extra fs",
             )
         try:
             md_parser = MarkItDown()
-            result = md_parser.convert(str_path)
+            result = md_parser.convert(doc_path)
             text = result.text_content
         except Exception as e:
             raise ToolError(ToolErrorCode.INTERNAL_ERROR, f"Failed to parse document: {e}")
@@ -121,33 +119,44 @@ async def search_document(path: str, query: str, top_k: int = 5) -> str:
         if not text.strip():
             raise ToolError(ToolErrorCode.INTERNAL_ERROR, "Document appears to be empty.")
 
+        # 删除同路径的旧 hash 分块
+        coll.delete(where={"doc_path": doc_path})
+
         raw_chunks = _chunk_document(text)
-        embeddings = await embed_client.embed(raw_chunks)
+        ids = [f"{file_hash}#{i}" for i in range(len(raw_chunks))]
+        metas = [
+            {"doc_path": doc_path, "doc_name": resolved.name, "doc_hash": file_hash, "chunk_idx": i}
+            for i in range(len(raw_chunks))
+        ]
+        coll.add(ids=ids, documents=raw_chunks, metadatas=metas)
 
-        store = VectorStore()
-        for chunk_text, emb in zip(raw_chunks, embeddings):
-            store.add(Chunk(
-                text=chunk_text,
-                file_path=resolved.name,
-                start_line=0,
-                end_line=0,
-                file_hash=file_hash,
-                embedding=emb,
-            ))
-
-        _doc_stores[str_path] = (file_hash, store)
-    else:
-        store = cached[1]
-
-    query_emb = await embed_client.embed_single(query)
-    results = store.search(query_emb, top_k=top_k)
-
-    if not results:
+    # 查询：限定在本文档范围内
+    doc_chunk_count = len(
+        coll.get(
+            where={"$and": [{"doc_path": doc_path}, {"doc_hash": file_hash}]},
+            include=[],
+        )["ids"]
+    )
+    actual_n = min(top_k, doc_chunk_count)
+    if actual_n == 0:
         return f"No relevant content found in '{resolved.name}' for: '{query}'"
 
-    parts = [f"Top {len(results)} passage(s) in '{resolved.name}' for: '{query}'\n"]
-    for i, (chunk, score) in enumerate(results, 1):
-        parts.append(f"[{i}] relevance: {score:.3f}\n{chunk.text}\n")
+    res = coll.query(
+        query_texts=[query],
+        n_results=actual_n,
+        where={"$and": [{"doc_path": doc_path}, {"doc_hash": file_hash}]},
+        include=["documents", "distances"],
+    )
+    docs = res["documents"][0]
+    dists = res["distances"][0]
+
+    if not docs:
+        return f"No relevant content found in '{resolved.name}' for: '{query}'"
+
+    parts = [f"Top {len(docs)} passage(s) in '{resolved.name}' for: '{query}'\n"]
+    for i, (text, dist) in enumerate(zip(docs, dists), 1):
+        relevance = 1.0 - dist
+        parts.append(f"[{i}] relevance: {relevance:.3f}\n{text}\n")
     return "\n".join(parts)
 
 

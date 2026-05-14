@@ -22,7 +22,7 @@ class PermissionLevel(str, Enum):
 WRITE_TOOLS = {"write_file", "move_file", "delete_file", "organize_files", "tag_files"}
 READ_TOOLS = {"list_files", "read_file", "search_files", "file_info", "read_pdf",
               "read_docx", "preview_file", "summarize_file", "compare_files",
-              "search_by_tag", "semantic_search", "index_files"}
+              "search_by_tag", "semantic_search", "index_files", "search_document"}
 
 
 def is_allowed(tool_name: str, level: PermissionLevel) -> bool:

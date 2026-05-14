@@ -25,6 +25,8 @@ from scaffold.prompts.loader import build_dynamic_prompt
 from scaffold.safety.injection import INJECTION_DEFENSE_PROMPT
 from scaffold.safety.sandbox import PathSandbox
 from scaffold.skills import load_skills
+from scaffold.context.compression import CompressionStrategy
+
 
 from fs_agent.policies.permissions import FSPermissionGuard, PermissionLevel
 from fs_agent.tools.file_tools import registry, set_sandbox
@@ -121,7 +123,7 @@ class FSAgent:
 
     def new_context(self) -> ContextWindow:
         """返回一个为该 Agent 配置好的新 ContextWindow。"""
-        return ContextWindow(system_prompt=self._dynamic_prompt, budget=self._budget)
+        return ContextWindow(system_prompt=self._dynamic_prompt, budget=self._budget, compression_strategy=CompressionStrategy.NAIVE_SUMMARY)
 
     @property
     def result_cache(self) -> ResultCache:
@@ -240,8 +242,14 @@ class FSAgent:
         base = config.embedding_api_base or os.environ.get("EMBEDDING_API_BASE", "")
         model = config.embedding_model or os.environ.get("EMBEDDING_MODEL_NAME", "")
         if key and model:
-            configure_search(EmbeddingClient(api_key=key, base_url=base or None, model=model))
-            logger.info("Embedding client configured: model=%s", model)
+            workspace = Path(config.workspace).expanduser().resolve()
+            persist_dir = workspace / ".chroma"
+            persist_dir.mkdir(parents=True, exist_ok=True)
+            configure_search(
+                EmbeddingClient(api_key=key, base_url=base or None, model=model),
+                persist_dir=persist_dir,
+            )
+            logger.info("Embedding client configured: model=%s, chroma=%s", model, persist_dir)
 
     def _wire_ref_store(self, ctx: ContextWindow) -> None:
         from fs_agent.tools.reference_tools import set_ref_store

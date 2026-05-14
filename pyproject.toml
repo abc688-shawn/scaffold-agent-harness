@@ -21,8 +21,9 @@ dependencies = [
 
 [project.optional-dependencies]
 fs = [
-    "markitdown[pdf,docx]>=0.0.1",
+    "markitdown[pdf,docx,pptx,xlsx]>=0.0.1",
     "chardet>=5.0",
+    "chromadb>=0.4.0",
 ]
 eval = [
     "tabulate>=0.9",

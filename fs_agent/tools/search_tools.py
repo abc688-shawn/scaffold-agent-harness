@@ -1,101 +1,17 @@
-"""语义搜索工具 —— 基于 embedding 的工作区检索。
+"""语义搜索工具 —— 基于 ChromaDB (HNSW ANN) 的工作区与文档检索。
 
-使用轻量级内存向量库。Embedding 可以懒加载计算
-（首次搜索时）或通过 `index_workspace` 显式建立。
-
-支持可插拔的 embedding 后端；默认使用 OpenAI 兼容的
-embedding 接口（也适用于 DeepSeek 等服务）。
+Embedding 通过 OpenAI 兼容接口计算（支持 DeepSeek 等服务）。
+持久化由 ChromaDB PersistentClient 负责，落到 <workspace>/.chroma/。
 """
 from __future__ import annotations
 
 import hashlib
-import math
 import os
-import pickle
-from dataclasses import dataclass, field
 from pathlib import Path
 
 from scaffold.tools.errors import ToolError, ToolErrorCode
 
 from fs_agent.tools.file_tools import registry, _check_sandbox
-
-
-# ---------------------------------------------------------------------------
-# 向量库（轻量、内存型、可用 pickle 持久化）
-# ---------------------------------------------------------------------------
-
-@dataclass
-class Chunk:
-    """带有 embedding 和来源信息的文本分块。"""
-    text: str
-    file_path: str
-    start_line: int
-    end_line: int
-    file_hash: str
-    embedding: list[float] = field(default_factory=list)
-
-
-class VectorStore:
-    """支持余弦相似度搜索的简单内存向量库。"""
-
-    def __init__(self) -> None:
-        self._chunks: list[Chunk] = []
-        self._file_hashes: dict[str, str] = {}  # 文件路径 -> 内容哈希
-
-    def add(self, chunk: Chunk) -> None:
-        self._chunks.append(chunk)
-
-    def remove_file(self, file_path: str) -> int:
-        before = len(self._chunks)
-        self._chunks = [c for c in self._chunks if c.file_path != file_path]
-        self._file_hashes.pop(file_path, None)
-        return before - len(self._chunks)
-
-    def search(self, query_embedding: list[float], top_k: int = 5) -> list[tuple[Chunk, float]]:
-        if not self._chunks or not query_embedding:
-            return []
-        results = []
-        for chunk in self._chunks:
-            if chunk.embedding:
-                score = _cosine_similarity(query_embedding, chunk.embedding)
-                results.append((chunk, score))
-        results.sort(key=lambda x: x[1], reverse=True)
-        return results[:top_k]
-
-    def is_indexed(self, file_path: str, current_hash: str) -> bool:
-        return self._file_hashes.get(file_path) == current_hash
-
-    def mark_indexed(self, file_path: str, file_hash: str) -> None:
-        self._file_hashes[file_path] = file_hash
-
-    @property
-    def total_chunks(self) -> int:
-        return len(self._chunks)
-
-    @property
-    def indexed_files(self) -> int:
-        return len(self._file_hashes)
-
-    def save(self, path: str | Path) -> None:
-        with open(path, "wb") as f:
-            pickle.dump({"chunks": self._chunks, "hashes": self._file_hashes}, f)
-
-    def load(self, path: str | Path) -> None:
-        p = Path(path)
-        if p.exists():
-            with open(p, "rb") as f:
-                data = pickle.load(f)
-            self._chunks = data.get("chunks", [])
-            self._file_hashes = data.get("hashes", {})
-
-
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(x * x for x in b))
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)
 
 
 # ---------------------------------------------------------------------------
@@ -135,54 +51,84 @@ class EmbeddingClient:
 # 文本分块
 # ---------------------------------------------------------------------------
 
-def chunk_text(text: str, file_path: str, chunk_size: int = 500, overlap: int = 50) -> list[Chunk]:
-    """按行将文本切分为带重叠区域的多个块。"""
+def chunk_text(
+    text: str,
+    chunk_size: int = 500,
+    overlap: int = 50,
+) -> list[tuple[str, int, int, str]]:
+    """按行将文本切分为带重叠区域的多个块。
+
+    返回：list of (chunk_text, start_line, end_line, file_hash)
+    """
     lines = text.splitlines()
     if not lines:
         return []
 
     file_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
-    chunks = []
+    step = max(1, chunk_size - overlap)
+    chunks: list[tuple[str, int, int, str]] = []
     i = 0
     while i < len(lines):
         end = min(i + chunk_size, len(lines))
-        chunk_lines = lines[i:end]
-        chunk_text_str = "\n".join(chunk_lines)
-        if chunk_text_str.strip():
-            chunks.append(Chunk(
-                text=chunk_text_str,
-                file_path=file_path,
-                start_line=i + 1,
-                end_line=end,
-                file_hash=file_hash,
-            ))
-        i += chunk_size - overlap
+        chunk_str = "\n".join(lines[i:end])
+        if chunk_str.strip():
+            chunks.append((chunk_str, i + 1, end, file_hash))
+        i += step
     return chunks
 
 
 # ---------------------------------------------------------------------------
-# 模块级状态（启动时配置）
+# 模块级状态（启动时由 configure_search 初始化）
 # ---------------------------------------------------------------------------
 
-_store = VectorStore()
 _embed_client: EmbeddingClient | None = None
-_index_path: str | None = None
+_collection = None       # chromadb.Collection — workspace 文件索引
+_doc_collection = None   # chromadb.Collection — 单文档段落索引
 
 
 def configure_search(
     embed_client: EmbeddingClient,
-    index_path: str | None = None,
+    persist_dir: str | Path | None = None,
 ) -> None:
-    global _embed_client, _index_path
+    """初始化 embedding 客户端和 ChromaDB collections。
+
+    persist_dir: ChromaDB 持久化目录（None 则使用纯内存 EphemeralClient）。
+    """
+    global _embed_client, _collection, _doc_collection
     _embed_client = embed_client
-    _index_path = index_path
-    if index_path:
-        _store.load(index_path)
+    try:
+        from fs_agent.tools._chroma import (
+            get_client,
+            get_or_create_collection,
+            SyncEmbeddingFunction,
+        )
+        embed_fn = SyncEmbeddingFunction(embed_client)
+        client = get_client(Path(persist_dir) if persist_dir else None)
+        _collection = get_or_create_collection(client, "workspace_index", embed_fn)
+        _doc_collection = get_or_create_collection(client, "documents_index", embed_fn)
+    except ImportError:
+        # chromadb 未安装；工具首次调用时会给出明确报错
+        pass
 
 
 def get_embed_client() -> EmbeddingClient | None:
     """返回当前配置的 embedding 客户端（未配置时返回 None）。"""
     return _embed_client
+
+
+def _get_doc_collection():
+    """返回文档索引 collection（未配置时抛出 ToolError）。"""
+    if _doc_collection is None:
+        if _embed_client is None:
+            raise ToolError(
+                ToolErrorCode.INTERNAL_ERROR,
+                "Embedding client not configured. Set EMBEDDING_API_KEY and EMBEDDING_MODEL_NAME.",
+            )
+        raise ToolError(
+            ToolErrorCode.INTERNAL_ERROR,
+            "ChromaDB not available. Install with: uv sync --extra fs",
+        )
+    return _doc_collection
 
 
 # ---------------------------------------------------------------------------
@@ -194,14 +140,17 @@ async def index_files(path: str = ".", pattern: str = "*.py", recursive: bool = 
     """为语义搜索建立文件索引。使用 `semantic_search` 前应先调用它。
 
     它会扫描文件、切分文本块并计算 embedding。
-    已经建立索引且内容未变化的文件会被跳过。
+    已建立索引且内容未变化的文件会被跳过。
 
     path: 要建立索引的目录。
     pattern: 需要索引的文件 glob 模式（例如 `*.py`、`*.md`、`*.txt`）。
     recursive: 是否递归搜索子目录。
     """
-    if _embed_client is None:
-        raise ToolError(ToolErrorCode.INTERNAL_ERROR, "Embedding client not configured.")
+    if _embed_client is None or _collection is None:
+        raise ToolError(
+            ToolErrorCode.INTERNAL_ERROR,
+            "Embedding client not configured. Set EMBEDDING_API_KEY and EMBEDDING_MODEL_NAME.",
+        )
 
     resolved = _check_sandbox(path)
     if not resolved.is_dir():
@@ -223,37 +172,39 @@ async def index_files(path: str = ".", pattern: str = "*.py", recursive: bool = 
             file_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
             rel_path = str(fpath.relative_to(resolved))
 
-            if _store.is_indexed(rel_path, file_hash):
+            # 同路径 + 同 hash 已存在 → 跳过
+            existing = _collection.get(
+                where={"$and": [{"file_path": rel_path}, {"file_hash": file_hash}]},
+                limit=1,
+                include=["documents"],
+            )
+            if existing["documents"]:
                 skipped += 1
                 continue
 
-            # 移除该文件的旧分块
-            _store.remove_file(rel_path)
+            # 删掉该文件的旧分块（hash 变了）
+            _collection.delete(where={"file_path": rel_path})
 
-            # 切分并计算 embedding
-            chunks = chunk_text(text, rel_path)
+            chunks = chunk_text(text)
             if not chunks:
                 continue
 
-            batch_texts = [c.text for c in chunks]
-            embeddings = await _embed_client.embed(batch_texts)
-
-            for chunk, emb in zip(chunks, embeddings):
-                chunk.embedding = emb
-                _store.add(chunk)
-
-            _store.mark_indexed(rel_path, file_hash)
+            ids = [f"{rel_path}#{s}-{e}" for (_, s, e, _) in chunks]
+            docs = [t for (t, _, _, _) in chunks]
+            metas = [
+                {"file_path": rel_path, "start_line": s, "end_line": e, "file_hash": h}
+                for (_, s, e, h) in chunks
+            ]
+            # Chroma 内部调用 SyncEmbeddingFunction 计算 embedding
+            _collection.add(ids=ids, documents=docs, metadatas=metas)
             indexed += 1
         except Exception:
             errors += 1
 
-    # 持久化索引
-    if _index_path:
-        _store.save(_index_path)
-
+    total_chunks = _collection.count()
     return (
         f"Indexing complete: {indexed} files indexed, {skipped} skipped (unchanged), "
-        f"{errors} errors. Total: {_store.total_chunks} chunks from {_store.indexed_files} files."
+        f"{errors} errors. Collection now has {total_chunks} chunks."
     )
 
 
@@ -273,26 +224,38 @@ async def semantic_search(query: str, top_k: int = 5) -> str:
     query: 用自然语言描述你要找的内容。
     top_k: 返回结果数量。
     """
-    if _embed_client is None:
-        raise ToolError(ToolErrorCode.INTERNAL_ERROR, "Embedding client not configured.")
+    if _embed_client is None or _collection is None:
+        raise ToolError(
+            ToolErrorCode.INTERNAL_ERROR,
+            "Embedding client not configured. Set EMBEDDING_API_KEY and EMBEDDING_MODEL_NAME.",
+        )
 
-    if _store.total_chunks == 0:
+    total = _collection.count()
+    if total == 0:
         raise ToolError(
             ToolErrorCode.INVALID_ARGUMENTS,
             "No files indexed yet. Call index_files first.",
         )
 
-    query_emb = await _embed_client.embed_single(query)
-    results = _store.search(query_emb, top_k=top_k)
+    actual_n = min(top_k, total)
+    res = _collection.query(
+        query_texts=[query],
+        n_results=actual_n,
+        include=["documents", "metadatas", "distances"],
+    )
 
-    if not results:
+    docs = res["documents"][0]
+    metas = res["metadatas"][0]
+    dists = res["distances"][0]
+
+    if not docs:
         return f"No relevant results found for: '{query}'"
 
-    parts = [f"Found {len(results)} result(s) for: '{query}'\n"]
-    for i, (chunk, score) in enumerate(results, 1):
+    parts = [f"Found {len(docs)} result(s) for: '{query}'\n"]
+    for i, (doc, meta, dist) in enumerate(zip(docs, metas, dists), 1):
+        relevance = 1.0 - dist  # cosine distance: 0=identical → relevance=1
         parts.append(
-            f"[{i}] {chunk.file_path} (lines {chunk.start_line}-{chunk.end_line}) "
-            f"— relevance: {score:.3f}\n{chunk.text[:500]}\n"
+            f"[{i}] {meta['file_path']} (lines {meta['start_line']}-{meta['end_line']}) "
+            f"— relevance: {relevance:.3f}\n{doc[:500]}\n"
         )
-
     return "\n".join(parts)

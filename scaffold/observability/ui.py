@@ -158,7 +158,7 @@ if llm_spans:
     )
 
     # 表格视图
-    st.dataframe(chart_data, use_container_width=True)
+    st.dataframe(chart_data, width='stretch')
 else:
     st.info("No LLM spans in this run.")
 

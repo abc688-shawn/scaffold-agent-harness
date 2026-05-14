@@ -144,7 +144,7 @@ with st.sidebar:
     col1.metric("总 Tokens", f"{st.session_state.total_tokens:,}")
     col2.metric("总步数", st.session_state.total_steps)
 
-    if st.button("🗑 清空对话", use_container_width=True):
+    if st.button("🗑 清空对话", width='stretch'):
         st.session_state.messages = []
         st.session_state.total_tokens = 0
         st.session_state.total_steps = 0
@@ -166,7 +166,7 @@ with st.sidebar:
                 label = rec.user_input[:40] + ("…" if len(rec.user_input) > 40 else "")
                 st.caption(f"步骤 {rec.step} · {ago_str}")
                 st.text(f"❝ {label} ❞")
-                if st.button("继续此运行", key=f"resume_{rec.run_id}", use_container_width=True):
+                if st.button("继续此运行", key=f"resume_{rec.run_id}", width='stretch'):
                     st.session_state.resume_run_id = rec.run_id
                     st.rerun()
     except Exception:
