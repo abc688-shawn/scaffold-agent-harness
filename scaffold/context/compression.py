@@ -11,7 +11,7 @@
 """
 from __future__ import annotations
 
-import uuid
+import hashlib
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
@@ -34,8 +34,8 @@ class ReferenceStore:
     _store: dict[str, str] = field(default_factory=dict)
 
     def store(self, content: str) -> str:
-        ref_id = f"ref_{uuid.uuid4().hex[:8]}"
-        self._store[ref_id] = content
+        ref_id = f"ref_{hashlib.sha256(content.encode()).hexdigest()[:8]}"
+        self._store[ref_id] = content  # 幂等：相同内容始终得到相同 ref_id
         return ref_id
 
     def retrieve(self, ref_id: str) -> str | None:
