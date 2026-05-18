@@ -119,9 +119,8 @@ class ContextWindow:
         history_text = "".join((m.content or "") for m in self._messages)
         history_tokens = self._budget.count_tokens(history_text)
 
-        history = self._messages
         if self._budget.needs_compression(history_tokens):
-            history = await compress_messages(
+            self._messages = await compress_messages(
                 self._messages,
                 strategy=self._strategy,
                 keep_last_n=self._keep_last_n,
@@ -130,7 +129,7 @@ class ContextWindow:
             )
 
         system_text = self._dynamic_prompt.render()
-        return [Message.system(system_text)] + history
+        return [Message.system(system_text)] + self._messages
 
     def update_system_prompt(self, new_prompt: str) -> None:
         """替换基础 system prompt 文本。"""

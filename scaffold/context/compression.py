@@ -140,7 +140,10 @@ async def _naive_summary(
 
     lines: list[str] = []
     for m in old:
-        if m.role == Role.USER and m.content:
+        if m.role == Role.SYSTEM and m.content:
+            # 上一轮压缩留下的摘要消息，整体纳入本次汇总
+            lines.append(f"[早期对话摘要] {m.content}")
+        elif m.role == Role.USER and m.content:
             lines.append(f"用户：{m.content}")
         elif m.role == Role.ASSISTANT and m.content:
             snippet = m.content[:300] + "…" if len(m.content) > 300 else m.content
